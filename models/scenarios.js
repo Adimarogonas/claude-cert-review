@@ -1,5 +1,5 @@
 // Pure JS model — no React, no browser globals, no 'use client'.
-// Extracted verbatim from index.jsx (READ ONLY source of truth).
+// This file is the source of truth for the scenario/question bank.
 // Import this file on server or client side without restriction.
 
 export const SCENARIOS = [
@@ -91,6 +91,30 @@ export const SCENARIOS = [
         ],
         correct: 0,
         explanation: "Programmatic enforcement via a PreToolUse hook is the only deterministic approach. The hook inspects session state before the modification tool runs and blocks it if verification hasn't completed. Prompt instructions and few-shot examples are probabilistic — they can be bypassed. A post-processing check catches failures only after the fact."
+      },
+      {
+        id: "1h",
+        text: "Your support agent's loop is coded to keep iterating until Claude's response no longer contains the phrase 'let me check,' then stop. It occasionally halts mid-task or runs far too long. What is the correct signal to drive loop continuation?",
+        options: [
+          "Continue the loop while stop_reason is 'tool_use' and terminate when stop_reason is 'end_turn'.",
+          "Keep a fixed iteration cap of 10 turns as the primary stopping mechanism so the loop always terminates predictably on its own.",
+          "Parse each response for natural-language completion phrases like 'done' or 'task complete' and stop as soon as one appears.",
+          "Check whether the latest assistant message contains any text content, treating the presence of prose as a finished turn."
+        ],
+        correct: 0,
+        explanation: "stop_reason is the structural control-flow signal: 'tool_use' means execute the requested tools and iterate, 'end_turn' means the model is finished. Parsing natural-language phrases (C) and treating text presence as completion (D) are anti-patterns — the model emits prose alongside tool calls and phrasing varies. A fixed iteration cap (B) is a safety backstop, not the primary termination signal."
+      },
+      {
+        id: "1i",
+        text: "A customer writes: 'Stop — I want to speak to a human about this now.' The underlying issue (a delayed shipment) is one the agent could resolve autonomously. What is the correct behavior?",
+        options: [
+          "Resolve the shipment issue first since it is within the agent's capability, then offer a human only if the customer is still unsatisfied.",
+          "Run a sentiment check and escalate only if the message's measured negativity score exceeds the configured threshold.",
+          "Ask two clarifying questions to confirm the customer genuinely needs a human before routing the request onward.",
+          "Escalate to a human immediately with a structured handoff summary, since the customer explicitly requested one."
+        ],
+        correct: 3,
+        explanation: "An explicit request for a human is a hard escalation trigger that must be honored immediately, regardless of whether the agent could resolve the issue itself. Resolving first (A) overrides the customer's stated preference. Sentiment scores (B) are unreliable proxies for what the customer actually asked. Clarifying questions (C) add friction to an unambiguous request."
       }
     ]
   },
@@ -170,6 +194,30 @@ export const SCENARIOS = [
         ],
         correct: 3,
         explanation: "/compact summarises older conversation history to reclaim context window space. Use it when a long session approaches context limits and you need to continue without losing the work done so far. It does not affect files, archives, or response style."
+      },
+      {
+        id: "2g",
+        text: "You're about to have Claude Code implement a caching layer in a subsystem you don't fully understand. You want to surface design considerations (invalidation, failure modes) you might not have anticipated before any code is written. Which technique fits best?",
+        options: [
+          "Use the interview pattern: have Claude ask you questions about requirements and edge cases before it implements anything.",
+          "Have Claude write the implementation first, then review the resulting diff and iterate on whatever issues you happen to notice afterward.",
+          "Provide one detailed paragraph describing the desired behavior and let Claude infer the relevant edge cases on its own.",
+          "Raise the temperature so Claude explores a wider range of design alternatives before committing to one approach."
+        ],
+        correct: 0,
+        explanation: "The interview pattern — having Claude ask clarifying questions before implementing — surfaces considerations like cache invalidation and failure modes in an unfamiliar domain while changes are still cheap. Implementing first (B) defers discovery to review. A single prose description (C) relies on the very inference that is unreliable in unfamiliar domains. Temperature (D) affects output variance, not requirement discovery."
+      },
+      {
+        id: "2h",
+        text: "You analyzed a large codebase in a Claude Code session and now want to explore two different refactoring strategies from that same baseline analysis — without redoing the exploration or letting the two explorations contaminate each other. What is the correct mechanism?",
+        options: [
+          "Use fork_session to create two independent branches from the shared analysis baseline.",
+          "Use --resume on the original session twice and run both refactoring explorations within that same conversation.",
+          "Start two brand-new sessions and paste the full prior transcript into each so they share the same baseline.",
+          "Run /compact on the original session, then continue both explorations sequentially in the compacted context."
+        ],
+        correct: 0,
+        explanation: "fork_session creates independent branches from a shared baseline — each fork explores a divergent approach without affecting the other, and neither repeats the original analysis. Resuming the same session twice (B) runs both in one conversation where they contaminate each other. Pasting transcripts (C) reprocesses stale tool results instead of branching cleanly. /compact (D) reduces context but creates no isolated branches."
       }
     ]
   },
@@ -285,6 +333,54 @@ export const SCENARIOS = [
         ],
         correct: 2,
         explanation: "The Message Batches API provides a flat 50% cost reduction on all tokens. With 200 requests (well under the 100,000 limit), the batch fits in one submission. Most batches complete in under 1 hour, leaving substantial headroom against the 12-hour deadline. Rolling batches of 20 (A) and single consolidated calls (B) don't change the per-token rate. Prompt caching alone (D) reduces repeated prefix cost but does not provide the flat 50% discount across all tokens."
+      },
+      {
+        id: "3j",
+        text: "Your coordinator agent is configured but never delegates — it answers research questions itself instead of spawning the web-search and document-analysis subagents. Its system prompt clearly instructs delegation. What is the most likely configuration cause?",
+        options: [
+          "The subagents' AgentDefinition descriptions are too vague for the coordinator to know when each should be called.",
+          "The coordinator's allowedTools does not include 'Task', so it has no mechanism to spawn subagents at all.",
+          "The coordinator inherits the subagents' context automatically, so it already has their results and sees no need to delegate.",
+          "tool_choice is set to 'auto', which lets the model answer directly rather than forcing it to delegate every turn."
+        ],
+        correct: 1,
+        explanation: "Spawning subagents requires the 'Task' tool; if allowedTools omits 'Task', the coordinator literally cannot delegate no matter what the prompt says. Vague AgentDefinition descriptions (A) would cause mis-selection, not total inability to delegate. Subagents do not share context automatically (C) — that's backwards. tool_choice: 'auto' (D) permits direct answers but wouldn't prevent delegation when 'Task' is available and instructed."
+      },
+      {
+        id: "3k",
+        text: "Every query through your research system — even a one-line factual lookup — runs the full pipeline: web search, document analysis, synthesis, and report generation. Simple queries are slow and expensive as a result. What coordinator design fixes this?",
+        options: [
+          "Have the coordinator analyze each query's requirements and invoke only the subagents that query actually needs.",
+          "Keep the full pipeline but run all four subagents in parallel so total latency drops to that of the slowest one.",
+          "Cache the outputs of previous pipeline runs and replay the closest match whenever a similar query arrives later.",
+          "Merge synthesis and report generation into one combined subagent to cut the pipeline from four stages down to three."
+        ],
+        correct: 0,
+        explanation: "A coordinator should analyze query requirements and dynamically select which subagents to invoke rather than always routing through the full pipeline — a factual lookup may need only web search. Parallelizing (B) still pays for unnecessary subagents and their tokens. Caching (C) helps repeats but not novel simple queries. Merging stages (D) reduces stage count but still runs every stage for every query."
+      },
+      {
+        id: "3l",
+        text: "Your synthesis agent combines findings from several subagents into one report. The claims are accurate, but reviewers can't tell which source backs each claim — attribution is lost during synthesis. What must the upstream subagents and synthesis step do?",
+        options: [
+          "Have the synthesis agent re-run web searches at the very end to locate a supporting citation for each claim in the finished report.",
+          "Append a single combined bibliography at the end of the report listing every source that any subagent happened to touch.",
+          "Instruct the synthesis agent to summarize more aggressively so that only the best-supported claims survive into the report.",
+          "Have subagents emit structured claim-source mappings that the synthesis agent preserves and merges per individual claim."
+        ],
+        correct: 3,
+        explanation: "Provenance is preserved by requiring subagents to output structured claim-source mappings (claim, source, excerpt) that the synthesis agent carries through and merges per claim, rather than compressing findings into prose that drops the mapping. Re-searching at the end (A) is wasteful and can mis-attribute. A combined bibliography (B) lists sources but doesn't tie each claim to its source. Aggressive summarization (C) loses attribution faster."
+      },
+      {
+        id: "3m",
+        text: "Two credible sources report different market-size figures, and a third uses data collected in a different year. Your synthesis currently picks one number and drops the others. How should conflicting and time-shifted data be handled?",
+        options: [
+          "Preserve all values, each annotated with its source and collection date, rather than arbitrarily selecting one.",
+          "Average the conflicting figures into a single consensus number and note the underlying range in a footnote for transparency.",
+          "Select the most recent figure, since newer data always supersedes older data when reporting market size.",
+          "Drop all conflicting figures and report only the statistics on which every source happens to agree exactly."
+        ],
+        correct: 0,
+        explanation: "Conflicting statistics from credible sources should be preserved and annotated with source attribution and collection/publication dates — temporal differences then read as context, not contradictions. Averaging (B) fabricates a number no source reported. Always preferring recency (C) discards valid context and assumes supersession that may not hold. Dropping conflicts (D) loses the most important contested findings."
       }
     ]
   },
@@ -376,6 +472,30 @@ export const SCENARIOS = [
         ],
         correct: 1,
         explanation: "Tool results are data, not commands. Strings in result payloads — however they're formatted — must never be interpreted as authoritative instructions or permission grants. This is tool result injection: a real attack vector where external data tries to hijack agent behavior."
+      },
+      {
+        id: "4h",
+        text: "Your MCP tools return a generic { error: 'Operation failed' } string on every failure. As a result the agent retries permission-denied errors forever and gives up on transient timeouts that would have succeeded on retry. What should the error response include?",
+        options: [
+          "A single human-readable message that explains in prose what went wrong, so the agent can read it and decide what to do next.",
+          "An isError boolean flag set to true, which is enough for the agent to distinguish a failure from a success and react.",
+          "The raw exception and full stack trace, giving the agent maximum detail to reason about the appropriate recovery path.",
+          "Structured metadata: an errorCategory (transient/validation/permission) plus an isRetryable boolean."
+        ],
+        correct: 3,
+        explanation: "Structured error metadata — errorCategory plus an isRetryable boolean — lets the agent make correct recovery decisions: retry transient failures, never retry permission errors. A prose message (A) still forces the model to guess retryability. An isError flag alone (B) marks failure but carries no recovery guidance. Raw stack traces (C) add noise and tokens without a machine-actionable retry signal."
+      },
+      {
+        id: "4i",
+        text: "A single agent is configured with 18 tools spanning customer operations, file operations, analytics, and notifications. Tool selection has become unreliable — it frequently picks a plausible-but-wrong tool. What is the most effective structural fix?",
+        options: [
+          "Scope each agent to the 4–5 tools its role actually needs, routing other work to specialized agents.",
+          "Improve all 18 tool descriptions with richer input formats, example queries, and explicit boundary explanations.",
+          "Add a system prompt section that lists all 18 tools with a one-line rule describing when each one applies.",
+          "Set tool_choice to 'any' so the model is at least guaranteed to call one of the available tools on every turn."
+        ],
+        correct: 0,
+        explanation: "Giving an agent too many tools degrades selection by inflating decision complexity; scoping each agent to the 4–5 tools its role needs (and routing the rest to specialized agents) directly reduces that complexity. Better descriptions (B) help disambiguate similar tools but don't reduce the load of 18 choices. A prompt catalog (C) adds tokens without shrinking the decision space. tool_choice: 'any' (D) forces a call but not the right one."
       }
     ]
   },
@@ -455,6 +575,30 @@ export const SCENARIOS = [
         ],
         correct: 2,
         explanation: "Grep searches inside file contents by pattern — it's the purpose-built tool for finding callers. Glob finds files by path pattern, not content, so it would need a follow-up Read loop for each file (inefficient). Bash+find+xargs also works but exits the built-in tool layer unnecessarily when Grep handles this directly."
+      },
+      {
+        id: "5g",
+        text: "Your team needs a shared GitHub MCP server available to everyone who clones the repo, authenticated with a token that must not be committed to version control. Where and how should it be configured?",
+        options: [
+          "In project-scoped .mcp.json, referencing the token via ${GITHUB_TOKEN} environment-variable expansion.",
+          "In user-scoped ~/.claude.json on each developer's machine, with the access token pasted directly into the config file.",
+          "In the project CLAUDE.md, documented as a setup step that each developer copies into their own local configuration.",
+          "In project-scoped .mcp.json with the token committed inline, relying on the private repository for access control."
+        ],
+        correct: 0,
+        explanation: "Shared team servers belong in project-scoped .mcp.json (committed, available to all who clone), and secrets stay out of source control via environment-variable expansion like ${GITHUB_TOKEN}. User-scoped ~/.claude.json (B) is for personal/experimental servers and wouldn't be shared. CLAUDE.md (C) holds context, not server definitions. Committing the token inline (D) leaks the secret even in a private repo."
+      },
+      {
+        id: "5h",
+        text: "Your agent wastes many turns making exploratory tool calls just to discover what issues, docs, and schemas exist before it can do real work. You want to give it visibility into the available data without those probing calls. Which MCP capability fits?",
+        options: [
+          "Add a list_everything tool that the agent calls once at the start of every session to enumerate all of the available data.",
+          "Pre-load the full content of all issues, docs, and schemas into the system prompt so that nothing needs runtime discovery.",
+          "Increase max_turns so the agent has enough iterations to finish its exploratory calls before it runs out of budget.",
+          "Expose the catalogs as MCP resources, giving the agent visibility into available data without exploratory tool calls."
+        ],
+        correct: 3,
+        explanation: "MCP resources expose content catalogs (issue summaries, documentation hierarchies, database schemas) so the agent sees what's available without spending turns on exploratory tool calls. A list_everything tool (A) is itself an exploratory call every session. Pre-loading all content (B) floods the context window. Raising max_turns (C) tolerates the waste instead of eliminating it."
       }
     ]
   },
@@ -788,6 +932,18 @@ export const SCENARIOS = [
         ],
         correct: 1,
         explanation: "--append-system-prompt appends custom text to the end of the default prompt, preserving the default tool guidance, safety instructions, and coding conventions. Use this when Claude should remain a coding assistant that also follows your extra rules. --system-prompt and --system-prompt-file replace the entire default prompt — use those when the surface or identity differs from Claude Code's defaults. --bare --append-system-prompt is not a required combination."
+      },
+      {
+        id: "8k",
+        text: "Your CI review prompt says 'be conservative and only report high-confidence issues,' yet developers still complain about noisy false positives on stylistic nitpicks. What change most effectively improves precision?",
+        options: [
+          "Lower the model temperature so the reviewer behaves more consistently and therefore surfaces fewer borderline issues.",
+          "Replace the vague instruction with explicit criteria defining which categories to report versus skip.",
+          "Append 'really, only report issues you are genuinely very confident about' to reinforce the conservative instruction.",
+          "Switch to a larger model tier, which tends to apply conservative-reporting instructions more faithfully."
+        ],
+        correct: 1,
+        explanation: "Vague instructions like 'be conservative' don't improve precision; specific categorical criteria — which issue types to report (bugs, security) versus skip (minor style, local patterns) — do. Temperature (A) changes consistency, not what counts as reportable. Restating the vague instruction more emphatically (C) doesn't make it specific. A larger model (D) still has no concrete definition of what to report."
       }
     ]
   },
@@ -963,6 +1119,18 @@ export const SCENARIOS = [
         ],
         correct: 2,
         explanation: "A new supplier with a non-standard format is a new segment — it has not been validated, and existing thresholds do not transfer. Applying existing calibration to an unvalidated segment is the aggregate metrics trap at segment level: the 'invoices' category might show 99% accuracy, but this new format could have 45% accuracy hidden by standard invoice volume. The new format needs its own field-level accuracy measurement, its own confidence calibration on labelled examples, and its own validated thresholds. Visual checking of 10 documents (B) and threshold lowering (D) are not systematic validation."
+      },
+      {
+        id: "9o",
+        text: "Your extractor handles invoices with wildly varied layouts — inline totals, totals in tables, totals in footnotes. Detailed prose instructions describing each layout still produce inconsistent extraction. What most reliably improves consistency across these formats?",
+        options: [
+          "Make every total-related field required in the schema so the model is forced to locate and return a value for it.",
+          "Lengthen the prose instructions to describe every possible layout variation the model might encounter in still more detail.",
+          "Add a few targeted few-shot examples showing correct extraction from each varied layout.",
+          "Lower temperature to 0 so the extractor produces the same output for the same document on every run."
+        ],
+        correct: 2,
+        explanation: "Few-shot examples are the most effective technique when detailed instructions alone produce inconsistent output — 2–4 examples demonstrating correct extraction across the varied layouts let the model generalize to format variety. Required fields (A) pressure fabrication when a total is genuinely absent. More prose (B) is the approach that already failed. Temperature 0 (D) improves repeatability on one document, not generalization across layouts."
       }
     ]
   },
