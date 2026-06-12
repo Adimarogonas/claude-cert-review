@@ -28,9 +28,11 @@ export default function ProgressStats({ stats = [] }) {
             background: stat.highlight
               ? "var(--color-background-success)"
               : "var(--color-background-secondary)",
-            border: "1px solid var(--color-border-tertiary)",
-            borderRadius: 10,
-            padding: "1rem",
+            border: stat.highlight
+              ? "1px solid var(--monolith)"
+              : "1px solid var(--color-border-tertiary)",
+            borderRadius: "var(--radius-md)",
+            padding: "1rem 1.05rem",
             minHeight: 92,
             display: "flex",
             flexDirection: "column",
@@ -39,10 +41,14 @@ export default function ProgressStats({ stats = [] }) {
         >
           <div
             style={{
-              fontSize: 12,
-              color: "var(--color-text-secondary)",
-              marginBottom: 6,
-              fontWeight: 700,
+              fontFamily: "var(--font-text)",
+              fontSize: 11,
+              color: stat.highlight
+                ? "rgba(245, 243, 238, 0.7)"
+                : "var(--color-text-secondary)",
+              marginBottom: 8,
+              fontWeight: 500,
+              letterSpacing: "0.1em",
               textTransform: "uppercase",
             }}
           >
@@ -50,9 +56,11 @@ export default function ProgressStats({ stats = [] }) {
           </div>
           <div
             style={{
-              fontSize: 26,
-              fontWeight: 700,
-              lineHeight: 1.1,
+              fontFamily: "var(--font-display)",
+              fontSize: 28,
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+              lineHeight: 1.05,
               color: stat.highlight
                 ? "var(--color-text-success)"
                 : "var(--color-text-primary)",

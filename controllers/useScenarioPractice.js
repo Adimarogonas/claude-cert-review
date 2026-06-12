@@ -37,7 +37,7 @@ import { useProgress } from '@/controllers/ProgressContext';
  * }}
  */
 export function useScenarioPractice() {
-  const { progress, recordPractice } = useProgress();
+  const { progress, recordPractice, resetAnswers } = useProgress();
   const { answers, submitted } = progress;
 
   // ── scenarioStats ──────────────────────────────────────────────────────────
@@ -130,6 +130,23 @@ export function useScenarioPractice() {
   }
 
   /**
+   * resetScenario(scenarioId)
+   *
+   * Clears all recorded answers for a scenario's questions so the student can
+   * redo the scenario from scratch. Spaced-repetition mastery is preserved.
+   *
+   * @param {number} scenarioId
+   */
+  function resetScenario(scenarioId) {
+    const scenario = SCENARIOS.find((sc) => sc.id === scenarioId);
+    if (!scenario) {
+      console.warn(`useScenarioPractice.resetScenario: unknown scenario "${scenarioId}"`);
+      return;
+    }
+    resetAnswers(scenario.questions.map((q) => q.id));
+  }
+
+  /**
    * isSubmitted(qid)
    *
    * Returns true when the question has been submitted (answer locked in).
@@ -185,6 +202,7 @@ export function useScenarioPractice() {
     scenarios: SCENARIOS,
     scenarioStats,
     answerQuestion,
+    resetScenario,
     isSubmitted,
     getAnswer,
     getReviewQuestions,

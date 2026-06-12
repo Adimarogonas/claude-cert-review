@@ -1,16 +1,36 @@
 /*
- * globals.css
+ * globals.css — CarbonSilicon Labs design system
  *
- * Defines ALL Claude --color-* design tokens referenced in index.jsx inline
- * styles. These tokens were originally provided by the Claude host environment
- * and must be explicitly defined here so the standalone Next.js app renders
- * with correct colors.
+ * Applies the locked CSL brand (BRAND_SYSTEM.yaml v1.0) to the Claude
+ * Certified Architect practice app:
+ *   · Forma DJR — four optical cuts (Banner / Display / Deck / Text), local files
+ *   · Sealed palette — Carbon Black / Intelligence White / Monolith Grey / Alps Red
+ *   · Austere modernism — warm paper, hairline chrome, sharp corners, ink emphasis
  *
- * Token inventory (harvested from index.jsx):
- *   Backgrounds: --color-background-primary, -secondary, -success, -danger, -info
- *   Text:        --color-text-primary, -secondary, -success, -danger, -info
- *   Borders:     --color-border-tertiary, -secondary, -success, -danger, -info
+ * The legacy semantic --color-* tokens (consumed by inline styles throughout
+ * views/) are re-mapped here onto the brand palette so the whole UI shifts to
+ * the CSL register without rewriting every call site. Reading of the states:
+ *   success / correct / pass  → Monolith slab fill, Intelligence White text
+ *   danger  / incorrect       → Alps Red outline + ink (the only red in the UI)
+ *   info    / selected        → Carbon Black outline (ink emphasis)
  */
+
+/* ─── Forma DJR · brand typeface (local, never CDN) ─────────────────────────── */
+
+@font-face { font-family: "FDJR Text";    src: url("/fonts/forma/FormaDJRText-Regular.otf") format("opentype"); font-weight: 400; font-style: normal; font-display: swap }
+@font-face { font-family: "FDJR Text";    src: url("/fonts/forma/FormaDJRText-Medium.otf")  format("opentype"); font-weight: 500; font-style: normal; font-display: swap }
+@font-face { font-family: "FDJR Text";    src: url("/fonts/forma/FormaDJRText-Bold.otf")    format("opentype"); font-weight: 700; font-style: normal; font-display: swap }
+
+@font-face { font-family: "FDJR Display"; src: url("/fonts/forma/FormaDJRDisplay-Regular.otf") format("opentype"); font-weight: 400; font-style: normal; font-display: swap }
+@font-face { font-family: "FDJR Display"; src: url("/fonts/forma/FormaDJRDisplay-Medium.otf")  format("opentype"); font-weight: 500; font-style: normal; font-display: swap }
+
+@font-face { font-family: "FDJR Deck";    src: url("/fonts/forma/FormaDJRDeck-Regular.otf") format("opentype"); font-weight: 400; font-style: normal; font-display: swap }
+@font-face { font-family: "FDJR Deck";    src: url("/fonts/forma/FormaDJRDeck-Medium.otf")  format("opentype"); font-weight: 500; font-style: normal; font-display: swap }
+@font-face { font-family: "FDJR Deck";    src: url("/fonts/forma/FormaDJRDeck-Bold.otf")    format("opentype"); font-weight: 700; font-style: normal; font-display: swap }
+
+@font-face { font-family: "FDJR Banner";  src: url("/fonts/forma/FormaDJRBanner-Regular.otf") format("opentype"); font-weight: 400; font-style: normal; font-display: swap }
+@font-face { font-family: "FDJR Banner";  src: url("/fonts/forma/FormaDJRBanner-Medium.otf")  format("opentype"); font-weight: 500; font-style: normal; font-display: swap }
+@font-face { font-family: "FDJR Banner";  src: url("/fonts/forma/FormaDJRBanner-Bold.otf")    format("opentype"); font-weight: 700; font-style: normal; font-display: swap }
 
 *,
 *::before,
@@ -19,26 +39,61 @@
 }
 
 :root {
-  --color-background-primary: #ffffff;
-  --color-background-secondary: #f6f7f9;
-  --color-background-success: #ecfdf3;
-  --color-background-danger: #fff1f2;
-  --color-background-info: #eef5ff;
-  --color-page: #f8fafc;
+  /* ── Brand colors — sealed palette, no fifth color, no tints ── */
+  --carbon: #000000;
+  --intelligence: #f5f3ee;
+  --monolith: #1a1a1a;
+  --alps: #ed1c24;
 
-  --color-text-primary: #111827;
-  --color-text-secondary: #667085;
-  --color-text-success: #067647;
-  --color-text-danger: #c01048;
-  --color-text-info: #175cd3;
+  /* warm paper surfaces, derived only within the permitted Carbon-Black hairline range */
+  --paper: #fbfaf6;   /* card / option surface, lifted off the page */
+  --sunken: #ece9e1;  /* sunken panel — warm grey tint of Intelligence White */
 
-  --color-border-tertiary: #eaecf0;
-  --color-border-secondary: #d0d5dd;
-  --color-border-success: #75e0a7;
-  --color-border-danger: #fda4af;
-  --color-border-info: #84caff;
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 24px rgba(16, 24, 40, 0.06);
-  --shadow-focus: 0 0 0 4px rgba(132, 202, 255, 0.32);
+  /* ── Type families ── */
+  --font-banner: "FDJR Banner", "FDJR Display", system-ui, sans-serif;
+  --font-display: "FDJR Display", "FDJR Deck", system-ui, sans-serif;
+  --font-deck: "FDJR Deck", "FDJR Text", system-ui, sans-serif;
+  --font-text: "FDJR Text", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* ── Type scale — from BRAND_SYSTEM.yaml typography.type_scale_css ── */
+  --text-display: clamp(3rem, 6vw + 1rem, 7rem);
+  --text-h1: clamp(2.25rem, 3vw + 0.75rem, 4rem);
+  --text-h2: clamp(1.5rem, 2vw + 0.5rem, 2.5rem);
+  --text-h3: clamp(1.25rem, 1vw + 0.5rem, 1.75rem);
+  --text-subhead: clamp(1rem, 0.5vw + 0.5rem, 1.25rem);
+  --text-body: 1rem;
+  --text-small: 0.875rem;
+  --text-caption: 0.8125rem;
+  --text-label: 0.6875rem;
+
+  /* ── Radius — austere: hard-edged slab, near-square corners ── */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+
+  /* ── Legacy semantic tokens, re-mapped onto the brand ── */
+  --color-page: var(--intelligence);
+
+  --color-background-primary: var(--paper);
+  --color-background-secondary: var(--sunken);
+  --color-background-success: var(--monolith);   /* correct / pass → monolith slab */
+  --color-background-danger: var(--paper);        /* incorrect → outline only, no tint */
+  --color-background-info: var(--paper);          /* selected → outline only */
+
+  --color-text-primary: var(--carbon);
+  --color-text-secondary: #6b675f;                /* warm grey, AA on paper */
+  --color-text-success: var(--intelligence);      /* text on monolith fill */
+  --color-text-danger: var(--alps);
+  --color-text-info: var(--carbon);
+
+  --color-border-tertiary: rgba(0, 0, 0, 0.1);    /* hairline chrome — within 8–12% rule */
+  --color-border-secondary: rgba(0, 0, 0, 0.24);
+  --color-border-success: var(--monolith);
+  --color-border-danger: var(--alps);
+  --color-border-info: var(--carbon);
+
+  --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-focus: 0 0 0 3px rgba(0, 0, 0, 0.18);
 }
 
 html,
@@ -48,11 +103,11 @@ body {
   min-height: 100%;
   background: var(--color-page);
   color: var(--color-text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
+  font-family: var(--font-text);
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -63,36 +118,53 @@ main {
   min-height: 100vh;
 }
 
+/* Headlines: Forma DJR Display, Medium (500) — never Bold. Bold is wordmark only. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: var(--alps);
+  color: var(--intelligence);
+}
+
 a,
 button {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ── Buttons — sharp, hairline, ink-on-paper. Hover fills with ink. ── */
 button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   min-height: 2.75rem;
-  padding: 0.65rem 1rem;
-  border-radius: 8px;
+  padding: 0.65rem 1.1rem;
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-border-secondary);
-  background-color: var(--color-background-primary);
+  background-color: var(--paper);
   color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: 0.925rem;
-  font-weight: 600;
+  font-family: var(--font-text);
+  font-size: 0.9375rem;
+  font-weight: 500;
   line-height: 1.4;
+  letter-spacing: 0;
   text-align: center;
   white-space: normal;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  box-shadow: none;
+  transition: background-color 0.14s ease, border-color 0.14s ease,
+    color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
 }
 
 button:hover:not(:disabled) {
-  background-color: var(--color-background-secondary);
-  border-color: var(--color-border-secondary);
-  transform: translateY(-1px);
+  background-color: var(--sunken);
+  border-color: var(--carbon);
+  transform: none;
 }
 
 button:focus-visible {
@@ -102,25 +174,66 @@ button:focus-visible {
 
 button:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.45;
   transform: none;
 }
 
+/* Primary CTA — solid Carbon ink. The decisive action on a screen. */
+.btn-primary {
+  background-color: var(--carbon);
+  border-color: var(--carbon);
+  color: var(--intelligence);
+  font-weight: 500;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--monolith);
+  border-color: var(--monolith);
+  color: var(--intelligence);
+}
+
+/* Alps Red CTA — reserved for the single highest-emphasis start action. */
+.btn-accent {
+  background-color: var(--alps);
+  border-color: var(--alps);
+  color: var(--intelligence);
+  font-weight: 500;
+}
+
+.btn-accent:hover:not(:disabled) {
+  background-color: #d3151c;
+  border-color: #d3151c;
+  color: var(--intelligence);
+}
+
+/* Ghost — quiet, secondary navigation. */
+.btn-ghost {
+  background-color: transparent;
+  border-color: var(--color-border-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background-color: transparent;
+  border-color: var(--carbon);
+  color: var(--carbon);
+}
+
+/* ── App shell — flat warm paper, no gradient ── */
 .app-shell {
   min-height: 100vh;
-  padding: 40px 24px 56px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.96) 42%, rgba(248, 250, 252, 1) 100%);
+  padding: 56px 24px 72px;
+  background: var(--intelligence);
 }
 
 .app-surface {
-  width: min(100%, 920px);
+  width: min(100%, 960px);
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--paper);
   border: 1px solid var(--color-border-tertiary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
-  padding: clamp(24px, 4vw, 40px);
+  padding: clamp(24px, 4vw, 48px);
 }
 
 .page-stack {
@@ -129,14 +242,58 @@ button:disabled {
   margin: 0 auto;
 }
 
+/* ── Brand header — quiet slab mark + product wordmark ── */
+.brand-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 960px);
+  margin: 0 auto 20px;
+  padding: 0 2px;
+}
+
+.brand-bar__slab {
+  height: 26px;
+  width: auto;
+  display: block;
+}
+
+.brand-bar__mark {
+  font-family: var(--font-text);
+  font-weight: 700;
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--carbon);
+}
+
+.brand-bar__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-tertiary);
+}
+
+.brand-bar__tag {
+  font-family: var(--font-text);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
 @media (max-width: 720px) {
   .app-shell {
-    padding: 16px 12px 32px;
+    padding: 24px 12px 40px;
   }
 
   .app-surface {
-    border-radius: 10px;
-    padding: 20px 16px;
+    border-radius: var(--radius-md);
+    padding: 22px 16px;
+  }
+
+  .brand-bar {
+    margin-bottom: 14px;
   }
 
   button {

@@ -54,15 +54,17 @@ export default function Timer({ totalSeconds, onExpire }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
+        fontFamily: "var(--font-text)",
         fontSize: 15,
         fontWeight: 500,
-        color: isLow ? "var(--color-text-danger)" : "var(--color-text-secondary)",
+        letterSpacing: "0.02em",
+        color: isLow ? "var(--color-text-danger)" : "var(--color-text-primary)",
         background: isLow ? "var(--color-background-danger)" : "var(--color-background-secondary)",
         border: isLow
-          ? "1px solid var(--color-border-danger)"
+          ? "1.5px solid var(--color-border-danger)"
           : "1px solid var(--color-border-tertiary)",
-        borderRadius: 999,
-        padding: "0.55rem 0.85rem",
+        borderRadius: "var(--radius-sm)",
+        padding: "0.5rem 0.8rem",
         fontVariantNumeric: "tabular-nums",
       }}
     >

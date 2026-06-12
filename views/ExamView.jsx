@@ -10,7 +10,7 @@
  *   'completed'   — Results: raw/scaled score, pass/fail, per-question review
  */
 
-import { useExam, TIME_PER_QUESTION_SEC } from '@/controllers/useExam';
+import { useExam, TIME_PER_QUESTION_SEC, EXAM_QUESTION_COUNT } from '@/controllers/useExam';
 import { useProgress } from '@/controllers/ProgressContext';
 import QuestionCard from '@/views/components/QuestionCard';
 import Timer from '@/views/components/Timer';
@@ -38,18 +38,18 @@ function ExamHistorySummary({ examHistory }) {
         marginBottom: '1.5rem',
         background: 'var(--color-background-secondary)',
         border: '1px solid var(--color-border-tertiary)',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-md)',
         padding: '1rem 1.125rem',
       }}
     >
       <div
         style={{
-          fontSize: 12,
-          fontWeight: 700,
+          fontSize: 11,
+          fontWeight: 500,
           textTransform: 'uppercase',
-          letterSpacing: '0.05em',
+          letterSpacing: '0.1em',
           color: 'var(--color-text-secondary)',
-          marginBottom: '0.5rem',
+          marginBottom: '0.6rem',
         }}
       >
         Recent exam history
@@ -73,9 +73,10 @@ function ExamHistorySummary({ examHistory }) {
             </span>
             <span
               style={{
-                fontWeight: 500,
+                fontWeight: 700,
+                letterSpacing: '0.06em',
                 color: attempt.passed
-                  ? 'var(--color-text-success)'
+                  ? 'var(--carbon)'
                   : 'var(--color-text-danger)',
               }}
             >
@@ -91,16 +92,19 @@ function ExamHistorySummary({ examHistory }) {
 // ─── Phase: idle ──────────────────────────────────────────────────────────────
 
 function IdleScreen({ startExam, examHistory }) {
-  const totalQuestions = 101;
+  const totalQuestions = EXAM_QUESTION_COUNT;
+  const minutesPerQuestion = Math.round(TIME_PER_QUESTION_SEC / 60);
 
   return (
     <div className="page-stack">
       <h2
         style={{
-          fontSize: 34,
-          fontWeight: 750,
-          lineHeight: 1.12,
-          margin: '0 0 0.75rem',
+          fontFamily: 'var(--font-display)',
+          fontSize: 'var(--text-h1)',
+          fontWeight: 500,
+          letterSpacing: '-0.02em',
+          lineHeight: 1.04,
+          margin: '0 0 1rem',
           color: 'var(--color-text-primary)',
         }}
       >
@@ -108,23 +112,24 @@ function IdleScreen({ startExam, examHistory }) {
       </h2>
       <p
         style={{
+          fontFamily: 'var(--font-deck)',
           color: 'var(--color-text-secondary)',
-          margin: '0 0 2rem',
-          fontSize: 16,
+          margin: '0 0 2.25rem',
+          fontSize: 'var(--text-subhead)',
           lineHeight: 1.6,
         }}
       >
-        {totalQuestions} questions &middot; {TIME_PER_QUESTION_SEC} seconds per question &middot; passing score 720
+        {totalQuestions} random questions &middot; {minutesPerQuestion} min per question &middot; passing score 720
       </p>
 
       <ExamHistorySummary examHistory={examHistory} />
 
       <button
+        className="btn-accent"
         onClick={startExam}
         style={{
-          fontWeight: 700,
           fontSize: 15,
-          padding: '0.75rem 1.25rem',
+          padding: '0.8rem 1.4rem',
         }}
       >
         Start Mock Exam &rarr;
@@ -185,7 +190,7 @@ function InProgressScreen({
             so the display reflects controller state. onExpire is belt-and-suspenders. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Timer totalSeconds={secondsLeft} onExpire={submit} />
-          <button onClick={handleSubmitClick} style={{ fontWeight: 700 }}>
+          <button className="btn-primary" onClick={handleSubmitClick}>
             Submit exam &rarr;
           </button>
         </div>
@@ -196,15 +201,15 @@ function InProgressScreen({
         <div
           style={{
             background: 'var(--color-background-secondary)',
-            border: '1px solid var(--color-border-tertiary)',
-            borderRadius: 10,
-            padding: '1rem 1.125rem',
+            borderLeft: '2px solid var(--carbon)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.85rem 1.05rem',
             marginBottom: '1rem',
             fontSize: 13,
             color: 'var(--color-text-secondary)',
           }}
         >
-          <strong style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>
+          <strong style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>
             {currentQuestion.scenarioTitle}
           </strong>
           {currentQuestion.scenarioDesc && (
@@ -254,13 +259,17 @@ function InProgressScreen({
 
           let bg = 'var(--color-background-secondary)';
           let color = 'var(--color-text-secondary)';
+          let border = '1px solid var(--color-border-tertiary)';
 
-          if (isCurrent) {
-            bg = 'var(--color-background-info)';
-            color = 'var(--color-text-info)';
-          } else if (isDone) {
+          if (isDone) {
             bg = 'var(--color-background-success)';
             color = 'var(--color-text-success)';
+            border = '1px solid var(--monolith)';
+          }
+          if (isCurrent) {
+            border = '1.5px solid var(--carbon)';
+            color = 'var(--carbon)';
+            if (!isDone) bg = 'var(--paper)';
           }
 
           return (
@@ -271,16 +280,17 @@ function InProgressScreen({
               style={{
                 width: 32,
                 height: 32,
-                borderRadius: 8,
+                borderRadius: 'var(--radius-sm)',
                 fontSize: 12,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
                 fontWeight: 500,
+                fontVariantNumeric: 'tabular-nums',
                 background: bg,
                 color,
-                border: '1px solid var(--color-border-tertiary)',
+                border,
                 userSelect: 'none',
               }}
             >
@@ -317,9 +327,12 @@ function CompletedScreen({
       <div style={{ marginBottom: '1.75rem' }}>
         <div
           style={{
-            fontSize: 13,
+            fontSize: 11,
+            fontWeight: 500,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
             color: 'var(--color-text-secondary)',
-            marginBottom: 8,
+            marginBottom: 12,
           }}
         >
           Mock exam complete
@@ -343,10 +356,10 @@ function CompletedScreen({
 
       {/* ── Action buttons ── */}
       <div style={{ display: 'flex', gap: 10, marginBottom: '1.75rem', flexWrap: 'wrap' }}>
-        <button onClick={startExam} style={{ fontWeight: 500 }}>
+        <button className="btn-primary" onClick={startExam}>
           Take Another Exam &rarr;
         </button>
-        <button onClick={() => onNavigate('home')}>
+        <button className="btn-ghost" onClick={() => onNavigate('home')}>
           &larr; Back to Home
         </button>
       </div>

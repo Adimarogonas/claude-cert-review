@@ -33,8 +33,19 @@ export default function ReviewView({ onNavigate }) {
     <div className="page-stack">
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1.75rem', flexWrap: 'wrap' }}>
-        <button onClick={() => onNavigate('home')}>← Back</button>
-        <div style={{ fontSize: 28, fontWeight: 750, lineHeight: 1.15 }}>All questions</div>
+        <button className="btn-ghost" onClick={() => onNavigate('home')}>← Back</button>
+        <h2
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--text-h2)',
+            fontWeight: 500,
+            letterSpacing: '-0.015em',
+            lineHeight: 1.08,
+            margin: 0,
+          }}
+        >
+          All questions
+        </h2>
       </div>
 
       {/* Filter chips */}
@@ -44,14 +55,13 @@ export default function ReviewView({ onNavigate }) {
           return (
             <button
               key={key}
+              className={isActive ? 'btn-primary' : undefined}
               onClick={() => setFilter(key)}
               style={{
                 fontSize: 13,
-                padding: '0.55rem 0.85rem',
-                borderRadius: 999,
-                background: isActive ? 'var(--color-background-info)' : undefined,
-                color: isActive ? 'var(--color-text-info)' : undefined,
-                border: isActive ? '1px solid var(--color-border-info)' : undefined,
+                minHeight: 'auto',
+                padding: '0.5rem 0.85rem',
+                borderRadius: 'var(--radius-sm)',
               }}
             >
               {label} ({count})

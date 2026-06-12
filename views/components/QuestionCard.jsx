@@ -48,10 +48,12 @@ export default function QuestionCard({
       {/* Question text */}
       <div
         style={{
-          fontSize: 22,
-          fontWeight: 700,
-          marginBottom: "1.25rem",
-          lineHeight: 1.35,
+          fontFamily: "var(--font-display)",
+          fontSize: "var(--text-h3)",
+          fontWeight: 500,
+          letterSpacing: "-0.01em",
+          marginBottom: "1.4rem",
+          lineHeight: 1.3,
           color: "var(--color-text-primary)",
         }}
       >
@@ -79,13 +81,13 @@ export default function QuestionCard({
       {reveal && explanation && (
         <div
           style={{
-            marginTop: "0.75rem",
-            padding: "1rem 1.125rem",
+            marginTop: "0.85rem",
+            padding: "0.95rem 1.1rem",
             background: "var(--color-background-secondary)",
-            border: "1px solid var(--color-border-tertiary)",
-            borderRadius: 10,
+            borderLeft: "2px solid var(--carbon)",
+            borderRadius: "var(--radius-sm)",
             fontSize: 14,
-            lineHeight: 1.6,
+            lineHeight: 1.65,
             color: "var(--color-text-secondary)",
           }}
         >

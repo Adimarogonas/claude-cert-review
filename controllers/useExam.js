@@ -20,10 +20,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildExam, scoreExam } from '@/models/examEngine';
 import { useProgress } from '@/controllers/ProgressContext';
 
-// ─── Tunable constant ─────────────────────────────────────────────────────────
+// ─── Tunable constants ────────────────────────────────────────────────────────
 
-/** Seconds allocated per question (90 s × 101 questions ≈ 152 min total). */
-export const TIME_PER_QUESTION_SEC = 90;
+/** Seconds allocated per question (120 s × 60 questions = 120 min total). */
+export const TIME_PER_QUESTION_SEC = 120;
+
+/** Number of randomly-selected questions in a mock exam. */
+export const EXAM_QUESTION_COUNT = 60;
 
 // ─── Initial state factory ────────────────────────────────────────────────────
 
@@ -171,7 +174,12 @@ export function useExam() {
     // Abort any running timer from a previous session.
     clearTimer();
 
-    const questions = buildExam(opts);
+    // NOTE: startExam is wired directly to onClick handlers, so `opts` is often
+    // a React event rather than a real options object. Only honour an explicit
+    // numeric count; otherwise default to a 60-question random exam.
+    const count =
+      opts && typeof opts.count === 'number' ? opts.count : EXAM_QUESTION_COUNT;
+    const questions = buildExam({ count });
     const totalSeconds = questions.length * TIME_PER_QUESTION_SEC;
 
     setState({

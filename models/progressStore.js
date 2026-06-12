@@ -140,6 +140,13 @@ export function defaultProgress() {
     submitted: {},
     srState: {},
     examHistory: [],
+    // Durable spaced-repetition "buckets" (the current pass). null = no active
+    // pass. Shape when present:
+    //   { passIds: string[], setSize: number, scenarioFilter: number|null,
+    //     currentSetIndex: number, currentIndex: number }
+    // Persisted with the rest of progress so it survives navigation/refresh and
+    // is only ever cleared by an explicit user action (never by leaving a view).
+    srSession: null,
   };
 }
 
@@ -189,6 +196,14 @@ export function loadProgress(storage = createStorage()) {
       ? normalizeSrState(parsed.srState)
       : def.srState;
 
+  // srSession (the durable SR buckets) is either a well-formed object with a
+  // passIds array, or null. Anything else falls back to null.
+  const srSession =
+    (parsed.srSession && typeof parsed.srSession === 'object' &&
+      Array.isArray(parsed.srSession.passIds))
+      ? parsed.srSession
+      : def.srSession;
+
   return {
     answers:     (parsed.answers     && typeof parsed.answers === 'object' && !Array.isArray(parsed.answers))
                    ? parsed.answers     : def.answers,
@@ -197,6 +212,7 @@ export function loadProgress(storage = createStorage()) {
     srState,
     examHistory: Array.isArray(parsed.examHistory)
                    ? parsed.examHistory : def.examHistory,
+    srSession,
   };
 }
 
@@ -291,6 +307,34 @@ function applyAnswerResult(progress, qid, selectedIndex, isCorrect, today) {
       },
     },
   };
+}
+
+/**
+ * clearAnswers(progress, qids)
+ *
+ * Removes the given question ids from `answers` and `submitted` so they read as
+ * unanswered again — used to let a student redo a scenario. Spaced-repetition
+ * state (srState / Leitner box) is intentionally left untouched: redoing a quiz
+ * attempt should not wipe accumulated mastery, which lives at the question level.
+ *
+ * @param {Progress} progress
+ * @param {string[]} qids — question ids to clear
+ * @returns {Progress}    — new progress object
+ */
+export function clearAnswers(progress, qids) {
+  const ids = new Set(qids);
+
+  const answers = {};
+  for (const [qid, val] of Object.entries(progress.answers)) {
+    if (!ids.has(qid)) answers[qid] = val;
+  }
+
+  const submitted = {};
+  for (const [qid, val] of Object.entries(progress.submitted)) {
+    if (!ids.has(qid)) submitted[qid] = val;
+  }
+
+  return { ...progress, answers, submitted };
 }
 
 /**

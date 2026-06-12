@@ -1,5 +1,12 @@
 // Pure presentational component — no hooks, no 'use client' needed.
 // Renders one lettered option (A./B./C./D.) with prop-driven visual state.
+//
+// CSL state reading (sealed palette):
+//   idle      → warm paper, hairline chrome
+//   selected  → Carbon Black outline + filled ink letter chip (active)
+//   correct   → Monolith slab fill, Intelligence White text (the brand signature)
+//   incorrect → Alps Red outline + ink (the only red in the option set)
+//   disabled  → sunken paper, muted
 
 const STATE_STYLES = {
   idle: {
@@ -7,30 +14,35 @@ const STATE_STYLES = {
     border: "1px solid var(--color-border-tertiary)",
     color: "var(--color-text-primary)",
     cursor: "pointer",
+    chip: { background: "var(--sunken)", border: "1px solid var(--color-border-tertiary)", color: "var(--carbon)" },
   },
   selected: {
     background: "var(--color-background-info)",
-    border: "2px solid var(--color-border-info)",
-    color: "var(--color-text-info)",
+    border: "1.5px solid var(--carbon)",
+    color: "var(--color-text-primary)",
     cursor: "pointer",
+    chip: { background: "var(--carbon)", border: "1px solid var(--carbon)", color: "var(--intelligence)" },
   },
   correct: {
-    background: "var(--color-background-success)",
-    border: "1px solid var(--color-border-success)",
-    color: "var(--color-text-success)",
+    background: "var(--monolith)",
+    border: "1.5px solid var(--monolith)",
+    color: "var(--intelligence)",
     cursor: "default",
+    chip: { background: "var(--intelligence)", border: "1px solid var(--intelligence)", color: "var(--carbon)" },
   },
   incorrect: {
     background: "var(--color-background-danger)",
-    border: "1px solid var(--color-border-danger)",
-    color: "var(--color-text-danger)",
+    border: "1.5px solid var(--alps)",
+    color: "var(--alps)",
     cursor: "default",
+    chip: { background: "var(--alps)", border: "1px solid var(--alps)", color: "var(--intelligence)" },
   },
   disabled: {
     background: "var(--color-background-secondary)",
     border: "1px solid var(--color-border-tertiary)",
     color: "var(--color-text-secondary)",
     cursor: "default",
+    chip: { background: "var(--paper)", border: "1px solid var(--color-border-tertiary)", color: "var(--color-text-secondary)" },
   },
 };
 
@@ -45,6 +57,7 @@ const STATE_STYLES = {
  */
 export default function OptionButton({ letter, text, state = "idle", onClick }) {
   const styles = STATE_STYLES[state] ?? STATE_STYLES.idle;
+  const { chip, ...box } = styles;
   const isInteractive = state === "idle" || state === "selected";
 
   return (
@@ -53,42 +66,50 @@ export default function OptionButton({ letter, text, state = "idle", onClick }) 
       onClick={isInteractive ? onClick : undefined}
       style={{
         display: "grid",
-        gridTemplateColumns: "2rem 1fr auto",
+        gridTemplateColumns: "1.75rem 1fr auto",
         alignItems: "start",
-        gap: 12,
+        gap: 14,
         textAlign: "left",
-        padding: "1rem 1.125rem",
-        borderRadius: 10,
+        padding: "0.95rem 1.05rem",
+        borderRadius: "var(--radius-md)",
+        fontFamily: "var(--font-text)",
         fontSize: 15,
+        fontWeight: 400,
         lineHeight: 1.5,
         width: "100%",
         minHeight: "auto",
         boxShadow: "none",
-        ...styles,
+        transition: "border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease",
+        ...box,
       }}
     >
       <span
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: 7,
+          width: 26,
+          height: 26,
+          borderRadius: "var(--radius-sm)",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "rgba(255, 255, 255, 0.72)",
-          border: "1px solid var(--color-border-tertiary)",
+          fontFamily: "var(--font-text)",
           fontWeight: 700,
+          fontSize: 13,
           lineHeight: 1,
+          ...chip,
         }}
       >
         {letter}
       </span>
       <span>{text}</span>
       {state === "correct" && (
-        <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Correct</span>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+          Correct
+        </span>
       )}
       {state === "incorrect" && (
-        <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Your answer</span>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+          Your answer
+        </span>
       )}
     </button>
   );

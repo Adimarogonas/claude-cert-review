@@ -27,6 +27,7 @@ import {
   saveProgress,
   setAnswer,
   recordExam,
+  clearAnswers,
 } from '@/models/progressStore';
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -118,6 +119,33 @@ export function ProgressProvider({ children }) {
   }
 
   /**
+   * persistSrBuckets(buckets)
+   *
+   * Stores (or clears) the durable spaced-repetition buckets — the current
+   * pass partition. Pass an object { passIds, setSize, scenarioFilter } to set
+   * them, or null to clear. Persisted with the rest of progress, so buckets
+   * survive navigation and refresh and are only ever changed by an explicit
+   * user action (generate / reshuffle / clear).
+   *
+   * @param {{ passIds: string[], setSize: number, scenarioFilter: number|null }|null} buckets
+   */
+  function persistSrBuckets(buckets) {
+    setProgress((prev) => ({ ...prev, srSession: buckets }));
+  }
+
+  /**
+   * resetAnswers(qids)
+   *
+   * Clears the recorded answers/submitted flags for the given question ids so
+   * they can be attempted again. Leaves spaced-repetition state intact.
+   *
+   * @param {string[]} qids — question ids to clear
+   */
+  function resetAnswers(qids) {
+    setProgress((prev) => clearAnswers(prev, qids));
+  }
+
+  /**
    * resetProgress()
    *
    * Clears all progress (answers, SR state, exam history) and persists the
@@ -136,6 +164,8 @@ export function ProgressProvider({ children }) {
     recordPractice,
     recordExamResult,
     recordSrResult,
+    persistSrBuckets,
+    resetAnswers,
     resetProgress,
   };
 

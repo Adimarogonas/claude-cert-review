@@ -3,11 +3,16 @@
 /**
  * SpacedRepetitionView.jsx — Spaced-repetition drill mode.
  *
- * Four UI states:
- *   1. Not started   — mastery overview + session-size control + Start button
- *   2. Caught up     — no questions due; session returned an empty queue
- *   3. In progress   — one question at a time; select → Check → Next
- *   4. Complete      — session summary with updated mastery stats
+ * Two screens:
+ *   • Dashboard — landing/overview. Mastery, the current buckets (clickable sets),
+ *     and explicit bucket actions (generate / reshuffle / clear). Returning from
+ *     a drill always lands here.
+ *   • Drill     — one question at a time for the chosen set. Finishing the set
+ *     returns to the dashboard.
+ *
+ * Buckets are durable (persisted in progress); they only change via explicit
+ * generate / reshuffle / clear — never by leaving the screen or changing the
+ * scenario/size selectors.
  *
  * Props
  * ─────
@@ -29,26 +34,29 @@ const S = {
     margin: '0 auto',
   },
   title: {
-    fontSize: 34,
-    fontWeight: 750,
-    lineHeight: 1.12,
-    margin: '0 0 0.75rem',
+    fontFamily: 'var(--font-display)',
+    fontSize: 'var(--text-h1)',
+    fontWeight: 500,
+    letterSpacing: '-0.02em',
+    lineHeight: 1.04,
+    margin: '0 0 1rem',
     color: 'var(--color-text-primary)',
   },
   subtitle: {
+    fontFamily: 'var(--font-deck)',
     color: 'var(--color-text-secondary)',
-    margin: '0 0 2rem',
-    fontSize: 16,
-    lineHeight: 1.65,
-    maxWidth: 680,
+    margin: '0 0 2.25rem',
+    fontSize: 'var(--text-subhead)',
+    lineHeight: 1.6,
+    maxWidth: 620,
   },
   sectionLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'var(--color-text-secondary)',
-    marginBottom: 6,
+    marginBottom: 8,
     fontWeight: 500,
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.1em',
   },
   statsWrap: {
     marginBottom: '1.5rem',
@@ -56,36 +64,73 @@ const S = {
   // Session-size picker row
   sizePicker: {
     display: 'flex',
-    gap: 10,
+    gap: 8,
     alignItems: 'center',
     flexWrap: 'wrap',
     marginBottom: '1rem',
   },
   sizeBtn: (active) => ({
-    padding: '0.65rem 1rem',
+    padding: '0.6rem 1.1rem',
     fontSize: 14,
-    fontWeight: active ? 600 : 400,
-    borderRadius: 8,
-    background: active
-      ? 'var(--color-background-success)'
-      : 'var(--color-background-secondary)',
-    color: active
-      ? 'var(--color-text-success)'
-      : 'var(--color-text-primary)',
+    fontWeight: 500,
+    borderRadius: 'var(--radius-sm)',
+    background: active ? 'var(--carbon)' : 'var(--color-background-secondary)',
+    color: active ? 'var(--intelligence)' : 'var(--color-text-primary)',
     cursor: 'pointer',
     border: active
-      ? '1px solid var(--color-border-success)'
+      ? '1px solid var(--carbon)'
+      : '1px solid var(--color-border-tertiary)',
+  }),
+  scenarioSelect: {
+    fontFamily: 'var(--font-text)',
+    padding: '0.6rem 0.75rem',
+    fontSize: 14,
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--color-background-secondary)',
+    color: 'var(--color-text-primary)',
+    border: '1px solid var(--color-border-secondary)',
+    cursor: 'pointer',
+    maxWidth: '100%',
+  },
+  setIndicator: {
+    fontSize: 11,
+    color: 'var(--color-text-secondary)',
+    marginBottom: '0.6rem',
+    fontWeight: 500,
+    textTransform: 'uppercase',
+    letterSpacing: '0.1em',
+  },
+  setNavWrap: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: '1rem',
+  },
+  setChip: (active) => ({
+    minWidth: 34,
+    height: 34,
+    padding: '0 0.5rem',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 13,
+    fontWeight: active ? 700 : 500,
+    fontVariantNumeric: 'tabular-nums',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    userSelect: 'none',
+    background: active ? 'var(--paper)' : 'var(--color-background-secondary)',
+    color: active ? 'var(--carbon)' : 'var(--color-text-secondary)',
+    border: active
+      ? '1.5px solid var(--carbon)'
       : '1px solid var(--color-border-tertiary)',
   }),
   primaryBtn: {
-    fontWeight: 500,
-    padding: '0.75rem 1.25rem',
+    padding: '0.78rem 1.4rem',
     cursor: 'pointer',
   },
   ghostBtn: {
-    fontWeight: 400,
     padding: '0.65rem 1.1rem',
-    color: 'var(--color-text-secondary)',
     cursor: 'pointer',
   },
   buttonRow: {
@@ -100,25 +145,26 @@ const S = {
     marginBottom: '1rem',
   },
   masteryBarTrack: {
-    height: 10,
-    background: 'var(--color-background-secondary)',
-    borderRadius: 99,
+    height: 8,
+    background: 'var(--sunken)',
+    border: '1px solid var(--color-border-tertiary)',
+    borderRadius: 'var(--radius-sm)',
     overflow: 'hidden',
-    marginTop: 4,
+    marginTop: 6,
   },
   masteryBarFill: (pct) => ({
     height: '100%',
     width: `${Math.min(pct, 100)}%`,
-    background: 'var(--color-background-success)',
-    borderRadius: 99,
+    background: 'var(--carbon)',
     transition: 'width 0.4s ease',
   }),
   // In-session progress indicator
   progressIndicator: {
+    fontFamily: 'var(--font-deck)',
     fontSize: 15,
     color: 'var(--color-text-secondary)',
     marginBottom: '0.75rem',
-    fontWeight: 500,
+    fontWeight: 400,
   },
   // Scenario badge
   scenarioBadge: {
@@ -127,30 +173,29 @@ const S = {
     color: 'var(--color-text-secondary)',
     background: 'var(--color-background-secondary)',
     border: '1px solid var(--color-border-tertiary)',
-    borderRadius: 999,
-    padding: '0.45rem 0.75rem',
+    borderRadius: 'var(--radius-sm)',
+    padding: '0.4rem 0.7rem',
     marginBottom: '1rem',
   },
   // Feedback pill after answering
   feedbackPill: (correct) => ({
     display: 'inline-block',
-    fontWeight: 600,
-    fontSize: 14,
-    padding: '0.35rem 0.9rem',
-    borderRadius: 999,
-    background: correct
-      ? 'var(--color-background-success)'
-      : 'var(--color-background-danger)',
-    color: correct
-      ? 'var(--color-text-success)'
-      : 'var(--color-text-danger)',
-    marginTop: '0.75rem',
+    fontWeight: 700,
+    fontSize: 12,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    padding: '0.4rem 0.85rem',
+    borderRadius: 'var(--radius-sm)',
+    background: correct ? 'var(--monolith)' : 'var(--paper)',
+    color: correct ? 'var(--intelligence)' : 'var(--alps)',
+    border: correct ? '1px solid var(--monolith)' : '1.5px solid var(--alps)',
+    marginTop: '0.85rem',
     marginBottom: '0.25rem',
   }),
   // Session-complete score boxes
   scoreCard: {
     display: 'flex',
-    gap: 12,
+    gap: 10,
     marginBottom: '1.25rem',
     flexWrap: 'wrap',
   },
@@ -158,24 +203,56 @@ const S = {
     flex: 1,
     minWidth: 80,
     background: highlight
-      ? 'var(--color-background-success)'
+      ? 'var(--monolith)'
       : 'var(--color-background-secondary)',
-    border: '1px solid var(--color-border-tertiary)',
-    borderRadius: 10,
-    padding: '1rem',
+    border: highlight
+      ? '1px solid var(--monolith)'
+      : '1px solid var(--color-border-tertiary)',
+    borderRadius: 'var(--radius-md)',
+    padding: '1rem 1.05rem',
   }),
-  scoreBoxLabel: {
-    fontSize: 12,
-    color: 'var(--color-text-secondary)',
-    marginBottom: 2,
-  },
-  scoreBoxValue: (highlight) => ({
-    fontSize: 24,
+  scoreBoxLabel: (highlight) => ({
+    fontSize: 11,
     fontWeight: 500,
-    color: highlight
-      ? 'var(--color-text-success)'
-      : 'var(--color-text-primary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.1em',
+    color: highlight ? 'rgba(245, 243, 238, 0.7)' : 'var(--color-text-secondary)',
+    marginBottom: 6,
   }),
+  scoreBoxValue: (highlight) => ({
+    fontFamily: 'var(--font-display)',
+    fontSize: 26,
+    fontWeight: 500,
+    letterSpacing: '-0.01em',
+    color: highlight ? 'var(--intelligence)' : 'var(--color-text-primary)',
+  }),
+  // Dashboard set card (clickable to drill)
+  setCard: {
+    minWidth: 76,
+    padding: '0.7rem 0.85rem',
+    borderRadius: 'var(--radius-md)',
+    background: 'var(--color-background-secondary)',
+    border: '1px solid var(--color-border-tertiary)',
+    cursor: 'pointer',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 3,
+    alignItems: 'flex-start',
+    textAlign: 'left',
+  },
+  // "Set complete" banner on the dashboard
+  banner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    flexWrap: 'wrap',
+    marginBottom: '1.5rem',
+    padding: '0.85rem 1.05rem',
+    borderRadius: 'var(--radius-md)',
+    background: 'var(--color-background-secondary)',
+    border: '1px solid var(--color-border-tertiary)',
+    borderLeft: '2px solid var(--carbon)',
+  },
 };
 
 // ─── Session-size options ──────────────────────────────────────────────────────
@@ -204,6 +281,27 @@ function MasteryBar({ pct }) {
   );
 }
 
+// ─── SetNavigator sub-component ──────────────────────────────────────────────
+// Chips for every set in the pass. Clicking one jumps to (or redoes) that set.
+
+function SetNavigator({ total, currentIndex, onPick }) {
+  if (total <= 1) return null;
+  return (
+    <div style={S.setNavWrap}>
+      {Array.from({ length: total }, (_, i) => (
+        <div
+          key={i}
+          onClick={() => onPick(i)}
+          title={`Set ${i + 1}${i === currentIndex ? ' (current — click to redo)' : ''}`}
+          style={S.setChip(i === currentIndex)}
+        >
+          {i + 1}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 /**
@@ -213,28 +311,41 @@ function MasteryBar({ pct }) {
  */
 export default function SpacedRepetitionView({ onNavigate }) {
   const {
-    startSession,
+    scenarios,
+    masteryStats,
+    // buckets
+    bucketsExist,
+    hasSets,
+    isCaughtUp,
+    totalSets,
+    setSize,
+    scenarioFilter,
+    sets,
+    generateBuckets,
+    clearBuckets,
+    // drilling
+    isDrilling,
+    activeSetIndex,
+    startDrill,
+    endDrill,
     currentQuestion,
     sessionProgress,
+    setInfo,
     answer,
     hasAnswered,
     lastResult,
     advance,
-    isCaughtUp,
-    isSessionComplete,
-    masteryStats,
-    resetSession,
+    // banner
+    lastSetSummary,
+    dismissSetSummary,
   } = useSpacedRepetition();
 
   // ── Local UI state ────────────────────────────────────────────────────────
-  // hasStarted: distinguishes "pre-start" from "isCaughtUp" (both have empty queue)
-  const [hasStarted, setHasStarted] = useState(false);
-  // selectedCount: session-size picker value
+  // selectedCount / selectedScenario: config form values (only used to generate)
+  // localSelected: which option index the user has clicked (before/after Check)
   const [selectedCount, setSelectedCount] = useState(10);
-  // localSelected: which option index the user has clicked (before or after Check)
+  const [selectedScenario, setSelectedScenario] = useState('all');
   const [localSelected, setLocalSelected] = useState(null);
-  // sessionCorrectCount: running tally of correct answers in current session
-  const [sessionCorrectCount, setSessionCorrectCount] = useState(0);
 
   // ── Derived display values ────────────────────────────────────────────────
 
@@ -247,235 +358,278 @@ export default function SpacedRepetitionView({ onNavigate }) {
     { label: 'Questions Mastered', value: `${masteredCount} / ${totalCount}` },
   ];
 
+  const scenarioIdArg = selectedScenario === 'all' ? null : Number(selectedScenario);
+
+  const scenarioLabel =
+    scenarioFilter == null
+      ? 'All scenarios'
+      : scenarios.find((sc) => sc.id === scenarioFilter)?.title ?? `Scenario ${scenarioFilter}`;
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleStart = useCallback(
-    (count) => {
-      setHasStarted(true);
+  const handleGenerate = useCallback(() => {
+    generateBuckets(selectedCount, scenarioIdArg);
+  }, [generateBuckets, selectedCount, scenarioIdArg]);
+
+  // Reshuffle keeps the CURRENT scenario + size (changing settings never resets
+  // buckets implicitly — only this explicit action does).
+  const handleReshuffle = useCallback(() => {
+    generateBuckets(setSize, scenarioFilter);
+  }, [generateBuckets, setSize, scenarioFilter]);
+
+  const handleStartDrill = useCallback(
+    (index) => {
       setLocalSelected(null);
-      setSessionCorrectCount(0);
-      startSession(count);
+      startDrill(index);
     },
-    [startSession]
+    [startDrill]
   );
 
-  // User clicks an option — just highlight it locally; don't submit yet.
   const handleSelect = useCallback(
     (idx) => {
-      if (hasAnswered) return; // already checked — ignore clicks
+      if (hasAnswered) return;
       setLocalSelected(idx);
     },
     [hasAnswered]
   );
 
-  // User clicks "Check" — submit the locally-selected answer to the controller.
   const handleCheck = useCallback(() => {
     if (localSelected === null || !currentQuestion || hasAnswered) return;
     answer(currentQuestion.id, localSelected);
   }, [localSelected, currentQuestion, hasAnswered, answer]);
 
-  // User clicks "Next" — advance to the next question.
   const handleAdvance = useCallback(() => {
-    if (lastResult?.wasCorrect) {
-      setSessionCorrectCount((n) => n + 1);
-    }
     setLocalSelected(null);
     advance();
-  }, [lastResult, advance]);
+  }, [advance]);
 
-  // Return to the start screen without losing persisted SR progress.
-  const handleReset = useCallback(() => {
-    setHasStarted(false);
+  const handleBackToDashboard = useCallback(() => {
     setLocalSelected(null);
-    setSessionCorrectCount(0);
-    resetSession();
-  }, [resetSession]);
+    endDrill();
+  }, [endDrill]);
 
-  // ── STATE 1 — Not started ─────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════
+  // DRILL SCREEN — one question at a time for the active set.
+  // ════════════════════════════════════════════════════════════════════════
 
-  if (!hasStarted) {
+  if (isDrilling) {
+    const { current, total } = sessionProgress;
+
     return (
       <div style={S.root}>
-        <h2 style={S.title}>Spaced Repetition Practice</h2>
-        <p style={S.subtitle}>
-          Questions you struggle with appear more often. Mastered questions phase out
-          automatically.
-        </p>
-
-        {/* Mastery stats tiles */}
-        <div style={S.statsWrap}>
-          <ProgressStats stats={masteryStatTiles} />
+        {/* Set indicator */}
+        <div style={S.setIndicator}>
+          Set {setInfo.current} of {setInfo.total}
         </div>
 
-        {/* Mastery progress bar */}
+        {/* Jump to / redo any set without leaving the drill */}
+        <SetNavigator
+          total={setInfo.total}
+          currentIndex={activeSetIndex}
+          onPick={handleStartDrill}
+        />
+
+        <div style={S.progressIndicator}>
+          Question {current} of {total}
+        </div>
+
         <MasteryBar pct={masteryPct} />
 
-        {/* Session-size picker */}
-        <div style={{ marginBottom: '1.25rem' }}>
-          <div style={S.sectionLabel}>Session size</div>
-          <div style={S.sizePicker}>
-            {SIZE_OPTIONS.map((opt) => (
-              <button
-                key={opt.label}
-                style={S.sizeBtn(selectedCount === opt.value)}
-                onClick={() => setSelectedCount(opt.value)}
-              >
-                {opt.label}
+        {currentQuestion?.scenarioTitle && (
+          <div style={S.scenarioBadge}>Scenario: {currentQuestion.scenarioTitle}</div>
+        )}
+
+        <QuestionCard
+          question={currentQuestion}
+          selectedIndex={localSelected}
+          reveal={hasAnswered}
+          onSelect={handleSelect}
+        />
+
+        {!hasAnswered && (
+          <div style={S.buttonRow}>
+            <button
+              className="btn-primary"
+              style={{
+                ...S.primaryBtn,
+                cursor: localSelected === null ? 'not-allowed' : 'pointer',
+              }}
+              disabled={localSelected === null}
+              onClick={handleCheck}
+            >
+              Check
+            </button>
+            <button className="btn-ghost" style={S.ghostBtn} onClick={handleBackToDashboard}>
+              Back to Dashboard
+            </button>
+          </div>
+        )}
+
+        {hasAnswered && (
+          <div>
+            <div style={S.feedbackPill(lastResult?.wasCorrect)}>
+              {lastResult?.wasCorrect ? 'Correct!' : 'Incorrect'}
+            </div>
+            <div style={S.buttonRow}>
+              <button className="btn-primary" style={S.primaryBtn} onClick={handleAdvance}>
+                Next
               </button>
-            ))}
+              <button className="btn-ghost" style={S.ghostBtn} onClick={handleBackToDashboard}>
+                Back to Dashboard
+              </button>
+            </div>
           </div>
-        </div>
-
-        {/* Action buttons */}
-        <div style={S.buttonRow}>
-          <button style={S.primaryBtn} onClick={() => handleStart(selectedCount)}>
-            Start Session
-          </button>
-          <button style={S.ghostBtn} onClick={() => onNavigate('home')}>
-            Back
-          </button>
-        </div>
+        )}
       </div>
     );
   }
 
-  // ── STATE 2 — Caught up ───────────────────────────────────────────────────
-  // isCaughtUp: startSession ran but returned an empty queue (nothing due).
+  // ════════════════════════════════════════════════════════════════════════
+  // DASHBOARD SCREEN — landing/overview. Always shown when not drilling.
+  // ════════════════════════════════════════════════════════════════════════
 
-  if (isCaughtUp && !isSessionComplete) {
-    return (
-      <div style={S.root}>
-        <h2 style={S.title}>All Caught Up!</h2>
-        <p style={S.subtitle}>
-          No questions are due right now. Come back later as questions cycle through
-          their review intervals.
-        </p>
-
-        <div style={S.statsWrap}>
-          <ProgressStats stats={masteryStatTiles} />
-        </div>
-
-        <MasteryBar pct={masteryPct} />
-
-        <div style={S.buttonRow}>
-          <button style={S.ghostBtn} onClick={() => onNavigate('home')}>
-            Back to Home
-          </button>
-        </div>
+  // Banner shown right after finishing a set.
+  const summaryBanner = lastSetSummary && (
+    <div style={S.banner}>
+      <div style={{ fontSize: 14, color: 'var(--color-text-primary)' }}>
+        <strong style={{ fontWeight: 700 }}>Set {lastSetSummary.setIndex + 1} complete</strong>
+        {' — '}
+        {lastSetSummary.correct}/{lastSetSummary.total} correct (
+        {lastSetSummary.total > 0
+          ? Math.round((lastSetSummary.correct / lastSetSummary.total) * 100)
+          : 0}
+        %)
       </div>
-    );
-  }
-
-  // ── STATE 4 — Session complete ────────────────────────────────────────────
-  // Check before STATE 3 — isSessionComplete takes precedence.
-
-  if (isSessionComplete) {
-    const displayCorrect = sessionCorrectCount;
-    const displayTotal = sessionProgress.total;
-    const accuracyPct =
-      displayTotal > 0 ? Math.round((displayCorrect / displayTotal) * 100) : 0;
-
-    return (
-      <div style={S.root}>
-        <h2 style={S.title}>Session Complete!</h2>
-        <p style={S.subtitle}>Here's how you did this session:</p>
-
-        {/* Score summary */}
-        <div style={S.scoreCard}>
-          <div style={S.scoreBox(true)}>
-            <div style={S.scoreBoxLabel}>Correct</div>
-            <div style={S.scoreBoxValue(true)}>{displayCorrect}</div>
-          </div>
-          <div style={S.scoreBox(false)}>
-            <div style={S.scoreBoxLabel}>Total</div>
-            <div style={S.scoreBoxValue(false)}>{displayTotal}</div>
-          </div>
-          <div style={S.scoreBox(false)}>
-            <div style={S.scoreBoxLabel}>Accuracy</div>
-            <div style={S.scoreBoxValue(false)}>{accuracyPct}%</div>
-          </div>
-        </div>
-
-        {/* Updated mastery after session */}
-        <div style={{ ...S.sectionLabel, marginBottom: '0.75rem' }}>Updated Mastery</div>
-        <div style={S.statsWrap}>
-          <ProgressStats stats={masteryStatTiles} />
-        </div>
-
-        <MasteryBar pct={masteryPct} />
-
-        <div style={S.buttonRow}>
-          <button style={S.primaryBtn} onClick={() => handleStart(selectedCount)}>
-            Start New Session
-          </button>
-          <button style={S.ghostBtn} onClick={() => onNavigate('home')}>
-            Back to Home
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── STATE 3 — Session in progress ────────────────────────────────────────
-  // currentQuestion is non-null here (all other states are handled above).
-
-  const { current, total } = sessionProgress;
+      <button
+        className="btn-ghost"
+        style={S.ghostBtn}
+        onClick={() => handleStartDrill(lastSetSummary.setIndex)}
+      >
+        ↻ Redo set
+      </button>
+      <button className="btn-ghost" style={S.ghostBtn} onClick={dismissSetSummary}>
+        Dismiss
+      </button>
+    </div>
+  );
 
   return (
     <div style={S.root}>
-      {/* Progress indicator */}
-      <div style={S.progressIndicator}>
-        Question {current} of {total}
+      <h2 style={S.title}>Spaced Repetition</h2>
+      <p style={S.subtitle}>
+        Questions are split into sets you work through one at a time. Pick a set to
+        drill; struggling questions appear more often and mastered ones phase out.
+      </p>
+
+      {summaryBanner}
+
+      <div style={S.statsWrap}>
+        <ProgressStats stats={masteryStatTiles} />
       </div>
 
-      {/* Mastery bar — updates live as the SR state advances */}
       <MasteryBar pct={masteryPct} />
 
-      {/* Scenario context badge */}
-      {currentQuestion?.scenarioTitle && (
-        <div style={S.scenarioBadge}>Scenario: {currentQuestion.scenarioTitle}</div>
-      )}
-
-      {/* Question card — shows selected highlight before Check; reveals after */}
-      <QuestionCard
-        question={currentQuestion}
-        selectedIndex={localSelected}
-        reveal={hasAnswered}
-        onSelect={handleSelect}
-      />
-
-      {/* Before answering: show "Check" button (only when an option is selected) */}
-      {!hasAnswered && (
-        <div style={S.buttonRow}>
-          <button
-            style={{
-              ...S.primaryBtn,
-              opacity: localSelected === null ? 0.45 : 1,
-              cursor: localSelected === null ? 'not-allowed' : 'pointer',
-            }}
-            disabled={localSelected === null}
-            onClick={handleCheck}
-          >
-            Check
-          </button>
-          <button style={S.ghostBtn} onClick={handleReset}>
-            End Session
-          </button>
-        </div>
-      )}
-
-      {/* After answering: show feedback pill + Next button */}
-      {hasAnswered && (
-        <div>
-          <div style={S.feedbackPill(lastResult?.wasCorrect)}>
-            {lastResult?.wasCorrect ? 'Correct!' : 'Incorrect'}
+      {/* ── No buckets yet → config (choose scenario + size, then generate) ── */}
+      {!bucketsExist && (
+        <>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <div style={S.sectionLabel}>Scenario</div>
+            <select
+              style={S.scenarioSelect}
+              value={selectedScenario}
+              onChange={(e) => setSelectedScenario(e.target.value)}
+            >
+              <option value="all">All scenarios</option>
+              {scenarios.map((sc) => (
+                <option key={sc.id} value={sc.id}>
+                  {sc.id}. {sc.title}
+                </option>
+              ))}
+            </select>
           </div>
+
+          <div style={{ marginBottom: '1.25rem' }}>
+            <div style={S.sectionLabel}>Questions per set</div>
+            <div style={S.sizePicker}>
+              {SIZE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.label}
+                  style={S.sizeBtn(selectedCount === opt.value)}
+                  onClick={() => setSelectedCount(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={S.buttonRow}>
-            <button style={S.primaryBtn} onClick={handleAdvance}>
-              Next
+            <button className="btn-primary" style={S.primaryBtn} onClick={handleGenerate}>
+              Generate Sets
+            </button>
+            <button className="btn-ghost" style={S.ghostBtn} onClick={() => onNavigate('home')}>
+              Back to Home
             </button>
           </div>
-        </div>
+        </>
+      )}
+
+      {/* ── Buckets exist but pool empty → caught up ── */}
+      {isCaughtUp && (
+        <>
+          <p style={{ ...S.subtitle, margin: '0.5rem 0 1.5rem' }}>
+            Every question in scope is mastered. Clear these sets to choose a different
+            scenario, or come back later as questions cycle through review.
+          </p>
+          <div style={S.buttonRow}>
+            <button className="btn-primary" style={S.primaryBtn} onClick={clearBuckets}>
+              Clear Sets
+            </button>
+            <button className="btn-ghost" style={S.ghostBtn} onClick={() => onNavigate('home')}>
+              Back to Home
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── Buckets exist with sets → the dashboard proper ── */}
+      {hasSets && (
+        <>
+          <div style={{ marginBottom: '0.75rem' }}>
+            <div style={S.sectionLabel}>
+              Your sets &middot; {scenarioLabel} &middot; {setSize} per set &middot; {totalSets} set
+              {totalSets !== 1 ? 's' : ''}
+            </div>
+            <div style={S.setNavWrap}>
+              {sets.map((s) => (
+                <button
+                  key={s.index}
+                  className="btn-ghost"
+                  style={S.setCard}
+                  onClick={() => handleStartDrill(s.index)}
+                  title={`Drill set ${s.index + 1}`}
+                >
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>Set {s.index + 1}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
+                    {s.count} q &middot; {Math.round(s.mastery * 100)}%
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={S.buttonRow}>
+            <button className="btn-ghost" style={S.ghostBtn} onClick={handleReshuffle}>
+              ↻ Reshuffle sets
+            </button>
+            <button className="btn-ghost" style={S.ghostBtn} onClick={clearBuckets}>
+              Clear sets
+            </button>
+            <button className="btn-ghost" style={S.ghostBtn} onClick={() => onNavigate('home')}>
+              Back to Home
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

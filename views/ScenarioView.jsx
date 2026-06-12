@@ -14,7 +14,7 @@ import { useScenarioPractice } from '@/controllers/useScenarioPractice';
  * as QuestionCard components with immediate per-question feedback on answer.
  */
 export default function ScenarioView({ scenarioId, onNavigate }) {
-  const { scenarios, scenarioStats, answerQuestion, isSubmitted, getAnswer } =
+  const { scenarios, scenarioStats, answerQuestion, resetScenario, isSubmitted, getAnswer } =
     useScenarioPractice();
 
   const scenario =
@@ -33,6 +33,13 @@ export default function ScenarioView({ scenarioId, onNavigate }) {
 
   const stats = scenarioStats[scenario.id] ?? { total: scenario.questions.length, answered: 0, correct: 0 };
 
+  const scenarioIndex = scenarios.findIndex((sc) => sc.id === scenario.id);
+  const nextScenario =
+    scenarioIndex >= 0 && scenarioIndex < scenarios.length - 1
+      ? scenarios[scenarioIndex + 1]
+      : null;
+  const allAnswered = stats.answered >= stats.total;
+
   return (
     <div className="page-stack">
       {/* Header nav */}
@@ -42,32 +49,73 @@ export default function ScenarioView({ scenarioId, onNavigate }) {
 
       {/* Scenario info block */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 500,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: 'var(--color-text-secondary)',
+            marginBottom: 8,
+          }}
+        >
           Scenario {scenario.id} of {scenarios.length}
         </div>
-        <h2 style={{ fontSize: 30, fontWeight: 750, lineHeight: 1.18, margin: '0 0 0.75rem' }}>
+        <h2
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--text-h2)',
+            fontWeight: 500,
+            letterSpacing: '-0.015em',
+            lineHeight: 1.08,
+            margin: '0 0 1rem',
+          }}
+        >
           {scenario.title}
         </h2>
         <div
           style={{
+            fontFamily: 'var(--font-deck)',
             fontSize: 15,
             color: 'var(--color-text-secondary)',
-            lineHeight: 1.6,
+            lineHeight: 1.65,
             background: 'var(--color-background-secondary)',
-            border: '1px solid var(--color-border-tertiary)',
-            padding: '1rem 1.125rem',
-            borderRadius: 10,
+            borderLeft: '2px solid var(--carbon)',
+            padding: '0.95rem 1.1rem',
+            borderRadius: 'var(--radius-sm)',
           }}
         >
           {scenario.description}
         </div>
 
-        {/* Score — only shown once at least one question is answered */}
+        {/* Score + redo — only shown once at least one question is answered */}
         {stats.answered > 0 && (
-          <div style={{ marginTop: '0.75rem', fontSize: 14, color: 'var(--color-text-secondary)' }}>
-            Score: {stats.correct}/{stats.total} &nbsp;·&nbsp;{' '}
-            {stats.answered}/{stats.total} answered &nbsp;·&nbsp;{' '}
-            {Math.round((stats.correct / stats.total) * 100)}% correct
+          <div
+            style={{
+              marginTop: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ fontSize: 14, color: 'var(--color-text-secondary)' }}>
+              Score: {stats.correct}/{stats.total} &nbsp;·&nbsp;{' '}
+              {stats.answered}/{stats.total} answered &nbsp;·&nbsp;{' '}
+              {Math.round((stats.correct / stats.total) * 100)}% correct
+            </div>
+            <button
+              className="btn-ghost"
+              onClick={() => resetScenario(scenario.id)}
+              style={{
+                fontSize: 13,
+                minHeight: 'auto',
+                padding: '0.45rem 0.85rem',
+                cursor: 'pointer',
+              }}
+            >
+              ↻ Redo scenario
+            </button>
           </div>
         )}
       </div>
@@ -112,6 +160,44 @@ export default function ScenarioView({ scenarioId, onNavigate }) {
           </div>
         );
       })}
+
+      {/* End-of-scenario navigation — appears once every question is answered */}
+      {allAnswered && (
+        <div
+          style={{
+            marginTop: '0.5rem',
+            paddingTop: '1.75rem',
+            borderTop: '1px solid var(--color-border-tertiary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          {nextScenario ? (
+            <>
+              <button
+                className="btn-primary"
+                onClick={() => onNavigate('scenario', nextScenario.id)}
+              >
+                Next scenario: {nextScenario.title} →
+              </button>
+              <button className="btn-ghost" onClick={() => onNavigate('home')}>
+                All scenarios
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 14, color: 'var(--color-text-secondary)' }}>
+                You've reached the last scenario.
+              </div>
+              <button className="btn-primary" onClick={() => onNavigate('home')}>
+                Back to all scenarios
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

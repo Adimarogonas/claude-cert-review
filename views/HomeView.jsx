@@ -32,17 +32,21 @@ const S = {
     margin: '0 auto',
   },
   title: {
-    fontSize: 34,
-    fontWeight: 750,
-    lineHeight: 1.12,
-    margin: '0 0 0.75rem',
+    fontFamily: 'var(--font-display)',
+    fontSize: 'var(--text-h1)',
+    fontWeight: 500,
+    letterSpacing: '-0.02em',
+    lineHeight: 1.04,
+    margin: '0 0 1rem',
   },
   subtitle: {
+    fontFamily: 'var(--font-deck)',
     color: 'var(--color-text-secondary)',
-    margin: '0 0 2rem',
-    fontSize: 16,
-    lineHeight: 1.65,
-    maxWidth: 680,
+    margin: '0 0 2.25rem',
+    fontSize: 'var(--text-subhead)',
+    fontWeight: 400,
+    lineHeight: 1.6,
+    maxWidth: 620,
   },
   statsWrap: {
     marginBottom: '1.75rem',
@@ -50,38 +54,38 @@ const S = {
   modePicker: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
-    gap: 12,
+    gap: 10,
     marginBottom: '1rem',
   },
   modeBtn: {
     justifyContent: 'center',
-    fontWeight: 700,
-    padding: '0.9rem 1rem',
+    fontWeight: 500,
+    padding: '0.95rem 1rem',
   },
   masteryReadout: {
     fontSize: 13,
     color: 'var(--color-text-secondary)',
     marginBottom: '1.5rem',
-    padding: '0.65rem 0.9rem',
+    padding: '0.6rem 0.85rem',
     background: 'var(--color-background-secondary)',
     border: '1px solid var(--color-border-tertiary)',
-    borderRadius: 999,
+    borderRadius: 'var(--radius-sm)',
     display: 'inline-block',
   },
   lastExamWrap: {
     marginBottom: '1.5rem',
     padding: '1rem 1.125rem',
     background: 'var(--color-background-secondary)',
-    border: '1px solid var(--color-border-tertiary)',
-    borderRadius: 10,
+    borderLeft: '2px solid var(--carbon)',
+    borderRadius: 'var(--radius-sm)',
   },
   lastExamLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'var(--color-text-secondary)',
-    marginBottom: 4,
+    marginBottom: 6,
     fontWeight: 500,
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.1em',
   },
   lastExamRow: {
     display: 'flex',
@@ -93,17 +97,17 @@ const S = {
     paddingTop: '1.75rem',
   },
   scenarioSectionLabel: {
-    fontSize: 13,
+    fontSize: 11,
     color: 'var(--color-text-secondary)',
-    marginBottom: '0.75rem',
+    marginBottom: '0.85rem',
     fontWeight: 500,
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.1em',
   },
   scenarioList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 10,
+    gap: 8,
   },
   scenarioBtn: {
     display: 'flex',
@@ -111,20 +115,21 @@ const S = {
     justifyContent: 'space-between',
     textAlign: 'left',
     padding: '1rem 1.125rem',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-md)',
   },
   scenarioBtnLeft: {
     flex: 1,
     minWidth: 0,
   },
   scenarioBtnTitle: {
-    fontWeight: 700,
+    fontFamily: 'var(--font-deck)',
+    fontWeight: 500,
     fontSize: 15,
   },
   scenarioBtnSub: {
     fontSize: 13,
     color: 'var(--color-text-secondary)',
-    marginTop: 1,
+    marginTop: 2,
   },
 };
 
@@ -200,7 +205,7 @@ export default function HomeView({ onNavigate }) {
 
       {/* Mode picker */}
       <div style={S.modePicker}>
-        <button style={S.modeBtn} onClick={() => onNavigate('exam')}>
+        <button className="btn-primary" style={S.modeBtn} onClick={() => onNavigate('exam')}>
           Mock Exam ↗
         </button>
         <button style={S.modeBtn} onClick={() => onNavigate('scenario')}>
@@ -233,9 +238,9 @@ export default function HomeView({ onNavigate }) {
             <div
               style={{
                 fontSize: 14,
-                fontWeight: 500,
+                fontWeight: 700,
                 color: lastExam.passed
-                  ? 'var(--color-text-success)'
+                  ? 'var(--carbon)'
                   : 'var(--color-text-secondary)',
               }}
             >
@@ -281,8 +286,9 @@ export default function HomeView({ onNavigate }) {
                   <div
                     style={{
                       fontSize: 13,
+                      fontWeight: allCorrect ? 700 : 400,
                       color: allCorrect
-                        ? 'var(--color-text-success)'
+                        ? 'var(--carbon)'
                         : 'var(--color-text-secondary)',
                       whiteSpace: 'nowrap',
                       marginLeft: 12,

@@ -3,24 +3,27 @@
 /**
  * useSpacedRepetition.js
  *
- * Hook that drives a Leitner-box spaced-repetition study session.
- * Reads and persists box state via useProgress (ProgressContext).
- * All Leitner scheduling delegated to models/spacedRepetition.js.
+ * Drives the spaced-repetition study mode, which has two screens:
  *
- * Returned API
- * ────────────
- * startSession(count?)   — build a new session queue (post-mount only)
- * currentQuestion        — full question object at current index, or null
- * sessionQueue           — array of full question objects for this session
- * sessionProgress        — { current, total }
- * answer(qid, idx)       — record answer, persist SR state, set feedback
- * hasAnswered            — bool: question answered, feedback visible
- * lastResult             — { qid, wasCorrect } | null
- * advance()              — move to next question after user sees feedback
- * isCaughtUp             — all non-mastered questions not yet due (empty queue)
- * isSessionComplete      — queue exhausted (currentIndex >= queue length)
- * masteryStats           — { overall, byScenario, masteredCount, totalCount }
- * resetSession()         — clear current session state (not persisted progress)
+ *   • Dashboard — the landing/overview screen. Shows mastery and the current
+ *     "buckets" (a fixed partition of the eligible question pool into sets).
+ *     From here you pick a set to drill, regenerate buckets, or clear them.
+ *   • Drill     — one question at a time for the chosen set. Finishing the set
+ *     returns to the dashboard (never auto-advances into the next set).
+ *
+ * Durable vs transient state
+ * ──────────────────────────
+ * The buckets (passIds + setSize + scenarioFilter) are DURABLE: they live in
+ * progress.srSession, persisted with the rest of progress, so they survive
+ * navigation and refresh. They change ONLY via an explicit user action —
+ * generateBuckets() or clearBuckets(). Nothing else (leaving the screen,
+ * changing the scenario/size selectors) touches them.
+ *
+ * Which set you're drilling and how far you've got within it are TRANSIENT
+ * (local component state) — leaving a drill simply returns you to the dashboard.
+ *
+ * The Leitner box for each question lives at the question level in srState and
+ * is unaffected by how buckets are formed.
  */
 
 import { useState, useCallback, useMemo } from 'react';
@@ -30,13 +33,18 @@ import {
   overallMastery,
   scenarioMastery,
   isMastered,
+  questionMastery,
 } from '@/models/spacedRepetition';
-import { SCENARIOS, getAllQuestions, getQuestionById } from '@/models/scenarios';
+import {
+  SCENARIOS,
+  getAllQuestions,
+  getQuestionById,
+  getScenarioById,
+} from '@/models/scenarios';
 import { useProgress } from '@/controllers/ProgressContext';
 
 // ---------------------------------------------------------------------------
 // Build a stable id → enriched-question map from getAllQuestions() once.
-// getAllQuestions() annotates each question with scenarioId and scenarioTitle.
 // ---------------------------------------------------------------------------
 
 function buildQuestionMap() {
@@ -47,7 +55,6 @@ function buildQuestionMap() {
   return map;
 }
 
-// Module-level constant — getAllQuestions is pure, so this is safe.
 const QUESTION_MAP = buildQuestionMap();
 
 function getCompleteSrState(progressSrState) {
@@ -57,98 +64,156 @@ function getCompleteSrState(progressSrState) {
   };
 }
 
+/**
+ * buildPassIds(srState, scenarioId, now)
+ *
+ * Orders the entire eligible (non-mastered) pool via the Leitner-weighted
+ * selectSession, then optionally narrows it to a single scenario. The result is
+ * a flat, ordered list of question ids that gets sliced into fixed-size sets.
+ */
+function buildPassIds(srState, scenarioId, now) {
+  // Infinity → selectSession returns the whole pool (clamped) in weighted order.
+  let ordered = selectSession(srState, Number.POSITIVE_INFINITY, now);
+
+  if (scenarioId !== null && scenarioId !== undefined) {
+    const scenario = getScenarioById(scenarioId);
+    const allowed = new Set(scenario ? scenario.questions.map((q) => q.id) : []);
+    ordered = ordered.filter((qid) => allowed.has(qid));
+  }
+
+  return ordered;
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
-/**
- * useSpacedRepetition()
- *
- * @returns {{
- *   startSession: (count?: number) => void,
- *   currentQuestion: object|null,
- *   sessionQueue: object[],
- *   sessionProgress: { current: number, total: number },
- *   answer: (qid: string, idx: number) => void,
- *   hasAnswered: boolean,
- *   lastResult: { qid: string, wasCorrect: boolean }|null,
- *   advance: () => void,
- *   isCaughtUp: boolean,
- *   isSessionComplete: boolean,
- *   masteryStats: {
- *     overall: number,
- *     byScenario: Object.<number, number>,
- *     masteredCount: number,
- *     totalCount: number,
- *   },
- *   resetSession: () => void,
- * }}
- */
 export function useSpacedRepetition() {
-  const { progress, recordSrResult } = useProgress();
+  const { progress, recordSrResult, persistSrBuckets } = useProgress();
 
-  // ── Session state ─────────────────────────────────────────────────────────
-  // sessionQueue: array of full (enriched) question objects
-  // currentIndex: pointer into sessionQueue
-  // hasAnswered:  true after answer() fires, until advance() fires
-  // lastResult:   { qid, wasCorrect } for feedback display
+  // ── Durable buckets (from persisted progress) ─────────────────────────────
+  const buckets = progress.srSession ?? null;
+  const bucketsExist = !!buckets && Array.isArray(buckets.passIds);
+  const passIds = bucketsExist ? buckets.passIds : [];
+  const setSize = bucketsExist && buckets.setSize > 0 ? buckets.setSize : 10;
+  const scenarioFilter = bucketsExist ? buckets.scenarioFilter ?? null : null;
+  const totalSets = bucketsExist && setSize > 0 ? Math.ceil(passIds.length / setSize) : 0;
 
-  const [sessionQueue, setSessionQueue] = useState([]);
+  // bucketsExist but the pool is empty → every in-scope question is mastered.
+  const isCaughtUp = bucketsExist && passIds.length === 0;
+  const hasSets = bucketsExist && passIds.length > 0;
+
+  // ── Transient drilling state ──────────────────────────────────────────────
+  const [activeSetIndex, setActiveSetIndex] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [lastResult, setLastResult] = useState(null);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [lastSetSummary, setLastSetSummary] = useState(null);
 
-  // ── startSession ──────────────────────────────────────────────────────────
+  const isDrilling = activeSetIndex !== null;
+
+  // Questions in the set currently being drilled.
+  const activeSetQuestions = useMemo(() => {
+    if (activeSetIndex === null) return [];
+    const start = activeSetIndex * setSize;
+    return passIds
+      .slice(start, start + setSize)
+      .map((id) => QUESTION_MAP[id])
+      .filter(Boolean);
+  }, [activeSetIndex, passIds, setSize]);
+
+  const currentQuestion = activeSetQuestions[currentIndex] ?? null;
+
+  const sessionProgress = {
+    current: currentIndex + 1,
+    total: activeSetQuestions.length,
+  };
+
+  const setInfo = {
+    current: (activeSetIndex ?? 0) + 1,
+    total: totalSets,
+  };
+
+  // ── Per-set metadata for the dashboard ────────────────────────────────────
+  const sets = useMemo(() => {
+    if (!hasSets) return [];
+    const srState = getCompleteSrState(progress.srState);
+    const out = [];
+    for (let i = 0; i < totalSets; i++) {
+      const ids = passIds.slice(i * setSize, i * setSize + setSize);
+      let mastery = 0;
+      for (const id of ids) mastery += questionMastery(srState[id] ?? { box: 0 });
+      out.push({
+        index: i,
+        count: ids.length,
+        mastery: ids.length ? mastery / ids.length : 0,
+      });
+    }
+    return out;
+  }, [hasSets, passIds, setSize, totalSets, progress.srState]);
+
+  // ── Bucket actions (explicit only) ────────────────────────────────────────
 
   /**
-   * startSession(count = 10)
+   * generateBuckets(count, scenarioId)
    *
-   * Must be called post-mount (e.g. in a useEffect or event handler).
-   * Never call during render — uses Date.now() and selectSession which
-   * rely on current time.
-   *
-   * If progress.srState is empty (first ever use), seeds it with initSrState()
-   * for scheduling purposes only (the persistent seed happens via recordSrResult
-   * on first answer, but we need a populated state to call selectSession now).
-   *
-   * @param {number} [count=10]
+   * Builds a fresh partition of the eligible pool and stores it durably. This is
+   * the only path that creates/reshuffles buckets. Returns to the dashboard.
    */
-  const startSession = useCallback(
-    (count = 10) => {
-      // Determine the SR state to use for selection.
-      // If the persisted srState is empty, fall back to a freshly seeded copy
-      // so selectSession has something to work with.  The persisted state will
-      // be populated on the first answer via recordSrResult.
+  const generateBuckets = useCallback(
+    (count = 10, scenarioId = null) => {
       const srState = getCompleteSrState(progress.srState);
-
       const now = Date.now();
-      const selectedIds = selectSession(srState, count, now);
-
-      // Map IDs → full enriched question objects.
-      const queue = selectedIds
-        .map((qid) => QUESTION_MAP[qid])
-        .filter(Boolean); // guard against stale IDs that no longer exist
-
-      setSessionQueue(queue);
+      const ids = buildPassIds(srState, scenarioId, now);
+      persistSrBuckets({ passIds: ids, setSize: count, scenarioFilter: scenarioId ?? null });
+      setActiveSetIndex(null);
       setCurrentIndex(0);
       setHasAnswered(false);
       setLastResult(null);
+      setLastSetSummary(null);
     },
-    [progress.srState]
+    [progress.srState, persistSrBuckets]
   );
 
-  // ── answer ────────────────────────────────────────────────────────────────
-
   /**
-   * answer(qid, idx)
+   * clearBuckets()
    *
-   * Computes correctness from the model's source-of-truth correct index —
-   * never trusts stored values.  Persists box advancement via recordSrResult.
-   * Sets feedback state (hasAnswered, lastResult).
-   *
-   * @param {string} qid   — question id, e.g. '1a'
-   * @param {number} idx   — 0-based option index the student picked
+   * The single explicit "clear" — discards the buckets entirely. Mastery in
+   * srState is never touched.
    */
+  const clearBuckets = useCallback(() => {
+    persistSrBuckets(null);
+    setActiveSetIndex(null);
+    setCurrentIndex(0);
+    setHasAnswered(false);
+    setLastResult(null);
+    setLastSetSummary(null);
+  }, [persistSrBuckets]);
+
+  // ── Drill actions ─────────────────────────────────────────────────────────
+
+  /** Begin drilling set `index` (also used to redo the set just finished). */
+  const startDrill = useCallback((index) => {
+    setActiveSetIndex(index);
+    setCurrentIndex(0);
+    setHasAnswered(false);
+    setLastResult(null);
+    setCorrectCount(0);
+    setLastSetSummary(null);
+  }, []);
+
+  /** Leave the drill and return to the dashboard (keeps buckets). */
+  const endDrill = useCallback(() => {
+    setActiveSetIndex(null);
+    setCurrentIndex(0);
+    setHasAnswered(false);
+    setLastResult(null);
+  }, []);
+
+  /** Dismiss the "set complete" banner shown on the dashboard. */
+  const dismissSetSummary = useCallback(() => setLastSetSummary(null), []);
+
   const answer = useCallback(
     (qid, idx) => {
       const question = getQuestionById(qid);
@@ -156,90 +221,45 @@ export function useSpacedRepetition() {
         console.warn(`useSpacedRepetition.answer: unknown question id "${qid}"`);
         return;
       }
-
       const isCorrect = idx === question.correct;
-
-      // Persist SR box advancement.
       recordSrResult(qid, isCorrect);
-
-      // Set feedback state — advance() will move to the next question.
+      if (isCorrect) setCorrectCount((n) => n + 1);
       setHasAnswered(true);
       setLastResult({ qid, wasCorrect: isCorrect });
     },
     [recordSrResult]
   );
 
-  // ── advance ───────────────────────────────────────────────────────────────
-
   /**
    * advance()
    *
-   * Called after the user acknowledges feedback.  Clears feedback state and
-   * moves the pointer to the next question.  If the queue is exhausted,
-   * currentIndex is allowed to reach sessionQueue.length (isSessionComplete).
+   * Move to the next question. If that was the last question in the set, record
+   * a summary and return to the dashboard rather than rendering a separate
+   * completion screen.
    */
   const advance = useCallback(() => {
-    setHasAnswered(false);
-    setLastResult(null);
-    setCurrentIndex((prev) => prev + 1);
-  }, []);
-
-  // ── resetSession ──────────────────────────────────────────────────────────
-
-  /**
-   * resetSession()
-   *
-   * Clears the current session state without touching persisted progress.
-   * Call this to abandon a session mid-way without losing box state.
-   */
-  const resetSession = useCallback(() => {
-    setSessionQueue([]);
-    setCurrentIndex(0);
-    setHasAnswered(false);
-    setLastResult(null);
-  }, []);
-
-  // ── Derived values ────────────────────────────────────────────────────────
-
-  const currentQuestion = sessionQueue[currentIndex] ?? null;
-
-  const sessionProgress = {
-    current: currentIndex + 1,
-    total: sessionQueue.length,
-  };
-
-  // isCaughtUp: startSession was called and returned an empty queue
-  // (all non-mastered questions are either mastered or not yet due).
-  // Distinguish "never started" (queue length 0, index 0) from "started and
-  // got nothing back" by tracking it via sessionQueue.length after startSession.
-  // We expose it as: queue was built (we can tell because sessionProgress.total
-  // could be 0 post-start, but we also need to distinguish pre-start).
-  // The simplest correct definition: isCaughtUp is true when the session queue
-  // is empty AND lastResult is null AND hasAnswered is false AND the hook has
-  // been used (i.e., startSession was called at some point).
-  // Since we reset all state in resetSession and startSession, a queue of [] with
-  // currentIndex=0 and hasAnswered=false is either "never started" OR "caught up".
-  // We track this via a dedicated flag populated by startSession.
-  // Re-implementation: use a separate piece of state for "startSession ran".
-  // However adding more state risks subtle bugs.  The real-world usage pattern is:
-  //   1. Mount → call startSession → if queue.length===0 show "all caught up" UI
-  //   2. If queue.length>0 work through questions
-  // The simplest reliable check: sessionQueue.length === 0 AND currentIndex === 0
-  // but only after startSession has been invoked.  We track this minimally.
-
-  // NOTE: Rather than a 4th isStarted flag (not in the spec), we expose isCaughtUp
-  // derived from the queue after startSession, which is only meaningful post-start.
-  // Callers should call startSession before reading isCaughtUp.
-  const isCaughtUp = sessionQueue.length === 0 && currentIndex === 0 && lastResult === null && !hasAnswered;
-
-  const isSessionComplete = sessionQueue.length > 0 && currentIndex >= sessionQueue.length;
+    const next = currentIndex + 1;
+    if (next >= activeSetQuestions.length) {
+      setLastSetSummary({
+        setIndex: activeSetIndex,
+        correct: correctCount,
+        total: activeSetQuestions.length,
+      });
+      setActiveSetIndex(null);
+      setCurrentIndex(0);
+      setHasAnswered(false);
+      setLastResult(null);
+    } else {
+      setCurrentIndex(next);
+      setHasAnswered(false);
+      setLastResult(null);
+    }
+  }, [currentIndex, activeSetQuestions.length, activeSetIndex, correctCount]);
 
   // ── masteryStats ──────────────────────────────────────────────────────────
-  // Derived from the live srState (updates after every recordSrResult call).
 
   const masteryStats = useMemo(() => {
     const srState = getCompleteSrState(progress.srState);
-
     const overall = overallMastery(srState);
 
     const byScenario = {};
@@ -257,18 +277,36 @@ export function useSpacedRepetition() {
   // ── Return ────────────────────────────────────────────────────────────────
 
   return {
-    startSession,
+    scenarios: SCENARIOS,
+    masteryStats,
+
+    // Buckets (durable)
+    bucketsExist,
+    hasSets,
+    isCaughtUp,
+    totalSets,
+    setSize,
+    scenarioFilter,
+    sets,
+    generateBuckets,
+    clearBuckets,
+
+    // Drilling (transient)
+    isDrilling,
+    activeSetIndex,
+    startDrill,
+    endDrill,
     currentQuestion,
-    sessionQueue,
     sessionProgress,
+    setInfo,
     answer,
     hasAnswered,
     lastResult,
     advance,
-    isCaughtUp,
-    isSessionComplete,
-    masteryStats,
-    resetSession,
+
+    // Set-complete banner
+    lastSetSummary,
+    dismissSetSummary,
   };
 }
 
