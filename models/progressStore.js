@@ -114,7 +114,7 @@ export function createStorage() {
  *
  * Shape:
  * {
- *   answers:     { [qid: string]: number }          — selected option index
+ *   answers:     { [qid: string]: number|null }     — selected option index
  *   submitted:   { [qid: string]: boolean }         — whether answer was committed
  *   srState:     { [qid: string]: {                 — spaced-repetition state
  *                    box: number,                    —   Leitner box (0–3)
@@ -231,7 +231,7 @@ export function saveProgress(progress, storage = createStorage()) {
  *
  * @param {Progress} progress     — current (immutable) progress
  * @param {string}   qid          — question id, e.g. '1a'
- * @param {number}   selectedIndex — 0-based option index the student picked
+ * @param {number|null} selectedIndex — 0-based option index the student picked
  * @param {boolean}  isCorrect    — whether selectedIndex matches correct answer
  * @returns {Progress}            — new progress object
  */
@@ -266,16 +266,45 @@ export function setAnswer(progress, qid, selectedIndex, isCorrect) {
   };
 }
 
+function applyAnswerResult(progress, qid, selectedIndex, isCorrect, today) {
+  const prev = progress.srState[qid] ?? {
+    box: 0,
+    lastSeen: null,
+    attempts: 0,
+    correct: 0,
+    wrong: 0,
+  };
+
+  const nextBox = isCorrect ? Math.min(prev.box + 1, MAX_BOX) : 0;
+
+  return {
+    answers: { ...progress.answers, [qid]: selectedIndex },
+    submitted: { ...progress.submitted, [qid]: true },
+    srState: {
+      ...progress.srState,
+      [qid]: {
+        box: nextBox,
+        lastSeen: today,
+        attempts: prev.attempts + 1,
+        correct: prev.correct + (isCorrect ? 1 : 0),
+        wrong: prev.wrong + (isCorrect ? 0 : 1),
+      },
+    },
+  };
+}
+
 /**
  * recordExam(progress, result)
  *
  * Appends a completed exam attempt to examHistory.
  *
  * @param {Progress} progress
- * @param {{ raw: number, total: number, scaled: number, passed: boolean }} result
+ * @param {{ raw: number, total: number, scaled: number, passed: boolean,
+ *           answers?: Array<{ qid: string, selectedIndex: number|null, isCorrect: boolean }> }} result
  * @returns {Progress}
  */
 export function recordExam(progress, result) {
+  const today = new Date().toISOString().slice(0, 10);
   const entry = {
     date:   new Date().toISOString(),
     raw:    result.raw,
@@ -284,10 +313,28 @@ export function recordExam(progress, result) {
     passed: result.passed,
   };
 
-  return {
+  let nextProgress = {
     ...progress,
     examHistory: [...progress.examHistory, entry],
   };
+
+  if (Array.isArray(result.answers)) {
+    for (const answer of result.answers) {
+      if (!answer || !answer.qid) continue;
+      nextProgress = {
+        ...nextProgress,
+        ...applyAnswerResult(
+          nextProgress,
+          answer.qid,
+          answer.selectedIndex,
+          Boolean(answer.isCorrect),
+          today
+        ),
+      };
+    }
+  }
+
+  return nextProgress;
 }
 
 // ─── Derived stats ────────────────────────────────────────────────────────────

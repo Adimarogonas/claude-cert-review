@@ -181,10 +181,9 @@ const S = {
 // ─── Session-size options ──────────────────────────────────────────────────────
 
 const SIZE_OPTIONS = [
-  { label: '3', value: 3 },
   { label: '10', value: 10 },
+  { label: '15', value: 15 },
   { label: '20', value: 20 },
-  { label: 'All', value: 9999 },
 ];
 
 // ─── MasteryBar sub-component ─────────────────────────────────────────────────

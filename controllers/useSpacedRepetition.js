@@ -50,6 +50,13 @@ function buildQuestionMap() {
 // Module-level constant — getAllQuestions is pure, so this is safe.
 const QUESTION_MAP = buildQuestionMap();
 
+function getCompleteSrState(progressSrState) {
+  return {
+    ...initSrState(),
+    ...(progressSrState ?? {}),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -112,10 +119,7 @@ export function useSpacedRepetition() {
       // If the persisted srState is empty, fall back to a freshly seeded copy
       // so selectSession has something to work with.  The persisted state will
       // be populated on the first answer via recordSrResult.
-      const srState =
-        progress.srState && Object.keys(progress.srState).length > 0
-          ? progress.srState
-          : initSrState();
+      const srState = getCompleteSrState(progress.srState);
 
       const now = Date.now();
       const selectedIds = selectSession(srState, count, now);
@@ -234,10 +238,7 @@ export function useSpacedRepetition() {
   // Derived from the live srState (updates after every recordSrResult call).
 
   const masteryStats = useMemo(() => {
-    const srState =
-      progress.srState && Object.keys(progress.srState).length > 0
-        ? progress.srState
-        : initSrState();
+    const srState = getCompleteSrState(progress.srState);
 
     const overall = overallMastery(srState);
 

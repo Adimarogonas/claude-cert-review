@@ -128,11 +128,20 @@ export function useExam() {
       );
 
       const result = scoreExam(prev.examQuestions, answersArray);
+      const answerResults = prev.examQuestions.map((q) => {
+        const selectedIndex =
+          prev.examAnswers[q.id] !== undefined ? prev.examAnswers[q.id] : null;
+        return {
+          qid: q.id,
+          selectedIndex,
+          isCorrect: selectedIndex === q.correct,
+        };
+      });
 
       // Persist result via ProgressContext (side-effect inside setState is
       // acceptable here because recordExamResult is stable / queues its own
       // state update in a separate context).
-      recordExamResultRef.current(result);
+      recordExamResultRef.current({ ...result, answers: answerResults });
 
       return {
         ...prev,

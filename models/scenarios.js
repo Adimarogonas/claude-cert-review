@@ -834,7 +834,7 @@ export const SCENARIOS = [
       },
       {
         id: "9d",
-        text: "Extracted dates are consistently in MM/DD/YYYY format but your schema requires ISO 8601. Validation fails on every document. What is the most effective fix?",
+        text: "Extracted dates are consistently in MM/DD/YYYY format but your schema requires ISO 8601. Validation fails on every document. What is the most effective fix without adding any extra steps to the pipeline?",
         options: [
           "Post-process the extracted output with a date normalization library before schema validation.",
           "Add a format normalization rule to the extraction prompt alongside the schema so the model outputs ISO 8601 directly.",
