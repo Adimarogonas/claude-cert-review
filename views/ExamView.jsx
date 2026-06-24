@@ -213,7 +213,7 @@ function InProgressScreen({
             {currentQuestion.scenarioTitle}
           </strong>
           {currentQuestion.scenarioDesc && (
-            <> &mdash; {currentQuestion.scenarioDesc.slice(0, 140)}&hellip;</>
+            <>  {currentQuestion.scenarioDesc}</>
           )}
         </div>
       )}

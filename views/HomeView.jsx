@@ -208,6 +208,9 @@ export default function HomeView({ onNavigate }) {
         <button className="btn-primary" style={S.modeBtn} onClick={() => onNavigate('exam')}>
           Mock Exam ↗
         </button>
+        <button style={S.modeBtn} onClick={() => onNavigate('modules')}>
+          Study by Domain
+        </button>
         <button style={S.modeBtn} onClick={() => onNavigate('scenario')}>
           Practice by Scenario
         </button>
