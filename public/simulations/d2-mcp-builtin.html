@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP Integration & Built-in Tools — CarbonSilicon</title>
+<link rel="stylesheet" href="/simulations/csl-sim.css">
+<style>
+  /* sim-specific CSS only — everything brand-level comes from csl-sim.css */
+  .arch-wrap{ position:relative }
+  .run-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px }
+  .task-card{ background:var(--sunken); border:1px solid var(--hair); border-radius:var(--r-sm);
+    padding:.6rem .75rem; margin:0 0 14px; font-size:12.5px; line-height:1.5; color:var(--carbon) }
+  .task-card .lbl{ font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.09em;
+    color:var(--ink-2); display:block; margin-bottom:4px }
+  .cfg-snip{ font-family:var(--mono); font-size:11.5px; line-height:1.6; background:var(--sunken);
+    border:1px solid var(--hair); border-radius:var(--r-sm); padding:.6rem .7rem; margin:12px 0 0;
+    white-space:pre; overflow:auto }
+  .cfg-snip .key{ color:var(--ink-2) }
+  .cfg-snip .danger{ color:var(--alps); font-weight:700 }
+  .risk-pill{ margin-top:6px }
+  .metric .v.risk-ok{ color:var(--carbon) }
+  .metric .v.risk-bad{ color:var(--alps) }
+  .seg.seg--wrap{ flex-wrap:wrap }
+  .legend{ font-size:11px; color:var(--ink-2); margin:10px 0 0; line-height:1.5 }
+  .legend b{ color:var(--alps) }
+</style>
+</head>
+<body>
+<main class="sim">
+
+  <div class="sim-head-row">
+    <div>
+      <div class="sim-eyebrow">Domain 2 · Interactive Simulation</div>
+      <h1 class="sim-title">Wiring MCP &amp; Choosing Built-in Tools</h1>
+    </div>
+    <button class="btn btn--ghost help-btn" id="helpBtn" aria-haspopup="dialog">? Help</button>
+  </div>
+  <p class="sim-deck">You are setting up a shared GitHub MCP server for the team and picking the right built-in tool for a search task. Each configuration choice deterministically moves four metrics — find the setup that ships correctly without leaking a secret.</p>
+
+  <div class="tabs" role="tablist" aria-label="Simulator sections">
+    <button class="tab" role="tab" id="t-sim"  aria-controls="p-sim"  aria-selected="true">Simulate</button>
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="false">Architecture</button>
+    <button class="tab" role="tab" id="t-kc"   aria-controls="p-kc"   aria-selected="false">Knowledge Check</button>
+  </div>
+
+  <!-- ── Simulate ──────────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-sim" role="tabpanel" aria-labelledby="t-sim">
+    <div class="cols cols-2">
+      <div class="panel">
+        <p class="panel-label">Configuration</p>
+
+        <div class="field">
+          <label id="lblScope">MCP config scope</label>
+          <div class="seg seg--wrap" role="group" aria-labelledby="lblScope">
+            <button type="button" id="scopeProject" data-val="project" aria-pressed="false">Project .mcp.json (committed)</button>
+            <button type="button" id="scopeUser" data-val="user" aria-pressed="true">User scope (~/.claude.json)</button>
+          </div>
+          <span class="hint">Project scope is version-controlled and shared with everyone who clones the repo. User scope stays on one machine.</span>
+        </div>
+
+        <div class="field">
+          <label id="lblSecret">Auth token handling</label>
+          <div class="seg seg--wrap" role="group" aria-labelledby="lblSecret">
+            <button type="button" id="secEnv" data-val="env" aria-pressed="false">${GITHUB_TOKEN} reference</button>
+            <button type="button" id="secInline" data-val="inline" aria-pressed="true">Inline API key</button>
+          </div>
+          <span class="hint">Env-var expansion keeps the credential out of git. An inline key gets committed in plaintext.</span>
+        </div>
+
+        <label class="toggle" style="margin:2px 0 14px">
+          <input type="checkbox" id="cfgResources">
+          <span class="track"></span>
+          <span>Expose issue/PR catalog as MCP resources</span>
+        </label>
+
+        <div class="field">
+          <label for="cfgTool">Tool for the search task below</label>
+          <select id="cfgTool">
+            <option value="grep">Grep — search file contents</option>
+            <option value="glob">Glob — match file name/path patterns</option>
+            <option value="read" selected>Read — open one known file</option>
+            <option value="bash">Bash — shell out to find/grep</option>
+          </select>
+          <span class="hint">Pick the built-in tool that best fits the task.</span>
+        </div>
+
+        <div class="task-card">
+          <span class="lbl">Search task</span>
+          Find every file in the monorepo that imports <code>@company/auth</code>.
+        </div>
+
+        <div class="field">
+          <label for="cfgErr">MCP tool hits a transient 503 — what does it return?</label>
+          <select id="cfgErr">
+            <option value="structured">Structured error: errorCategory transient, isRetryable true, next step</option>
+            <option value="stack">Raw stack trace string from the HTTP client</option>
+            <option value="swallow" selected>Empty result + status success (swallow it)</option>
+          </select>
+          <span class="hint">A transient 503 is retryable. The agent needs to know that — not a stack trace, and not a silent empty success.</span>
+        </div>
+
+        <div class="field">
+          <label id="lblEdit">Edit a config value whose anchor string appears 3× in the file</label>
+          <div class="seg seg--wrap" role="group" aria-labelledby="lblEdit">
+            <button type="button" id="editCtx" data-val="context" aria-pressed="false">Read for unique context, then targeted Edit</button>
+            <button type="button" id="editBlind" data-val="blind" aria-pressed="true">Blind Edit on the non-unique string</button>
+            <button type="button" id="editSed" data-val="sed" aria-pressed="false">Bash sed by line number</button>
+          </div>
+          <span class="hint">Edit needs a unique anchor. Read the surrounding lines to disambiguate; a blind Edit matches ambiguously and sed-by-line is brittle.</span>
+        </div>
+
+        <div class="run-row">
+          <button class="btn btn--primary" id="runBtn">▶ Run</button>
+          <button class="btn btn--ghost" id="resetBtn">↺ Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-label">Outcome</p>
+        <div class="metrics" id="metrics">
+          <div class="metric"><div class="v tnum" id="mSetup">—</div><div class="k">Setup correctness</div></div>
+          <div class="metric"><div class="v tnum" id="mExpl">—</div><div class="k">Exploratory calls</div></div>
+          <div class="metric"><div class="v tnum" id="mSearch">—</div><div class="k">Search efficiency</div></div>
+          <div class="metric"><div class="v tnum" id="mRisk">—</div><div class="k">Secret-leak risk</div></div>
+          <div class="metric"><div class="v tnum" id="mRecover">—</div><div class="k">Error recovery</div></div>
+          <div class="metric"><div class="v tnum" id="mEdit">—</div><div class="k">Edit precision</div></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="meter" id="setupMeter"><i></i></div>
+          <div class="metric" style="padding:6px 0 0"><div class="k">Setup correctness</div></div>
+        </div>
+
+        <div class="cfg-snip" id="snip" aria-label="Generated .mcp.json preview"></div>
+
+        <div class="log" id="log" style="margin-top:12px" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+    <div class="panel arch-wrap">
+      <p class="panel-label">System diagram</p>
+      <canvas id="arch" width="820" height="380" aria-label="Diagram of Claude Code connecting to a GitHub MCP server and built-in tools. A flag appears in Alps red when the configuration inlines a secret or uses user scope."></canvas>
+      <p class="legend">Ink on paper. A node turns <b>red</b> only when the current config has a fault — inline secret or user-scope server. Switch the controls on the Simulate tab, then return here.</p>
+    </div>
+  </section>
+
+  <!-- ── Knowledge Check ───────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-kc" role="tabpanel" aria-labelledby="t-kc" hidden>
+    <div class="panel" id="kcHost"></div>
+  </section>
+
+</main>
+
+<!-- ── Help overlay ────────────────────────────────────────────────────── -->
+<div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <h2 id="helpTitle">How this simulation works</h2>
+    <ol>
+      <li>Choose where the MCP server is configured and how its token is stored.</li>
+      <li>Decide whether to expose data as MCP <strong>resources</strong>, then pick a built-in tool for the search task.</li>
+      <li>Press <strong>Run</strong>. Each choice moves the four metrics deterministically; the generated <code>.mcp.json</code> reddens if you inline a secret.</li>
+      <li>Goal: 100% setup correctness, zero secret-leak risk, an efficient search, and few exploratory calls.</li>
+    </ol>
+    <button class="btn btn--primary" id="helpClose">Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function selectTab(tab){
+    tabs.forEach(function(t){
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if(tab.id === 't-arch') drawArch();
+  }
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){ selectTab(t); });
+    t.addEventListener('keydown', function(e){
+      var i = tabs.indexOf(t), n = null;
+      if(e.key === 'ArrowRight') n = tabs[(i+1)%tabs.length];
+      else if(e.key === 'ArrowLeft') n = tabs[(i-1+tabs.length)%tabs.length];
+      if(n){ e.preventDefault(); n.focus(); selectTab(n); }
+    });
+  });
+
+  // ── Help ───────────────────────────────────────────────────────────────
+  var help = document.getElementById('help');
+  document.getElementById('helpBtn').addEventListener('click', function(){ help.hidden = false; document.getElementById('helpClose').focus(); });
+  document.getElementById('helpClose').addEventListener('click', function(){ help.hidden = true; });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') help.hidden = true; });
+
+  // ── Segmented-control state ─────────────────────────────────────────────
+  var state = { scope:'user', secret:'inline', tool:'read', resources:false, err:'swallow', edit:'blind' };
+  function wireSeg(ids, key){
+    ids.forEach(function(id){
+      var b = document.getElementById(id);
+      b.addEventListener('click', function(){
+        state[key] = b.getAttribute('data-val');
+        ids.forEach(function(o){ document.getElementById(o).setAttribute('aria-pressed', o === id ? 'true' : 'false'); });
+        renderSnip();
+      });
+    });
+  }
+  wireSeg(['scopeProject','scopeUser'], 'scope');
+  wireSeg(['secEnv','secInline'], 'secret');
+  wireSeg(['editCtx','editBlind','editSed'], 'edit');
+
+  // ── Generated .mcp.json preview ─────────────────────────────────────────
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function renderSnip(){
+    var snip = document.getElementById('snip');
+    var path = state.scope === 'project' ? '.mcp.json  (committed to git)' : '~/.claude.json  (user-only, not in git)';
+    var tokenLine = state.secret === 'env'
+      ? '      "GITHUB_TOKEN": "${GITHUB_TOKEN}"'
+      : '      <span class="danger">"GITHUB_TOKEN": "ghp_3xAmPl3hardcodedSecret"</span>';
+    var html =
+      '<span class="key">// ' + esc(path) + '</span>\n' +
+      '{\n' +
+      '  "mcpServers": {\n' +
+      '    "github": {\n' +
+      '      "command": "npx",\n' +
+      '      "args": ["-y", "@modelcontextprotocol/server-github"],\n' +
+      '      "env": {\n' +
+      tokenLine + '\n' +
+      '      }\n' +
+      '    }\n' +
+      '  }\n' +
+      '}';
+    snip.innerHTML = html;
+  }
+
+  // ── Log helper ─────────────────────────────────────────────────────────
+  var logEl = document.getElementById('log'), step = 0;
+  function log(msg, cls){
+    var d = document.createElement('div');
+    d.className = 'log-line' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<span class="t">' + String(++step).padStart(2,'0') + '</span>  ' + msg;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ── Model: config → deterministic consequences (the teaching core) ──────
+  function run(){
+    logEl.innerHTML = ''; step = 0;
+    state.resources = document.getElementById('cfgResources').checked;
+    state.tool = document.getElementById('cfgTool').value;
+    state.err = document.getElementById('cfgErr').value;
+
+    // setup correctness: scope + secret each worth 50 points
+    var setup = 100;
+    var riskBad = false;
+
+    if(state.scope === 'project'){ log('Scope: project .mcp.json — committed, so every teammate gets the server on clone.', 'step'); }
+    else { setup -= 50; log('Scope: user ~/.claude.json — personal only; teammates clone the repo and the server is missing.', 'bad'); }
+
+    if(state.secret === 'env'){ log('Token: ${GITHUB_TOKEN} expansion — the secret stays in the environment, never in git.', 'step'); }
+    else { setup -= 50; riskBad = true; log('Token: inline API key — plaintext credential committed to version control. Secret-leak risk.', 'bad'); }
+
+    // exploratory tool calls: resources catalog cuts them sharply
+    var expl;
+    if(state.resources){ expl = 3; log('MCP resources ON: issue/PR catalog exposed — agent reads the catalog instead of probing.', 'step'); }
+    else { expl = 14; log('MCP resources OFF: no catalog — agent fires many exploratory tool calls to discover what exists.', 'bad'); }
+
+    // search efficiency for "find files importing @company/auth"
+    var search, sNote, sBad = false;
+    if(state.tool === 'grep'){ search = 100; sNote = 'Grep searches file CONTENTS for the import string — exactly right, one pass.'; }
+    else if(state.tool === 'glob'){ search = 35; sBad = true; sNote = 'Glob matches file NAMES/paths, not contents — it cannot find an import string. Wrong results.'; }
+    else if(state.tool === 'read'){ search = 20; sBad = true; sNote = 'Read opens one known file — to cover the monorepo you would read every file. Wasted calls.'; }
+    else { search = 70; sBad = true; sNote = 'Bash find|grep works but exits the built-in tool layer for a job Grep does cleanly.'; }
+    log('Search tool: ' + sNote, sBad ? 'bad' : 'step');
+
+    // error recovery: how the MCP tool reports a transient 503 (task 2.2)
+    var recover, rBad = false;
+    if(state.err === 'structured'){ recover = 100; log('503 handling: structured error — errorCategory transient, isRetryable true. The agent knows to retry, not give up.', 'step'); }
+    else if(state.err === 'stack'){ recover = 40; rBad = true; log('503 handling: raw stack trace returned — no errorCategory or isRetryable, so the agent cannot tell a retryable blip from a permanent fault.', 'bad'); }
+    else { recover = 10; rBad = true; log('503 handling: empty result reported as SUCCESS — the failure is swallowed; the coordinator proceeds on incomplete data, never knowing the call failed.', 'bad'); }
+
+    // edit precision: targeted edit on a non-unique anchor (task 2.5)
+    var editScore, eBad = false;
+    if(state.edit === 'context'){ editScore = 100; log('Edit: Read the surrounding lines to build a UNIQUE anchor, then a targeted Edit — lands on exactly the right occurrence.', 'step'); }
+    else if(state.edit === 'sed'){ editScore = 55; eBad = true; log('Edit: Bash sed by line number — works until the file shifts by a line; brittle and outside the built-in edit layer.', 'bad'); }
+    else { editScore = 20; eBad = true; log('Edit: blind Edit on a string that appears 3× — ambiguous match; the edit fails or rewrites the wrong occurrence.', 'bad'); }
+
+    // paint metrics
+    set('mSetup', setup + '%', setup < 100);
+    setMeter('setupMeter', setup/100, setup < 100);
+    set('mExpl', expl, expl > 6);
+    set('mSearch', search + '%', search < 100);
+
+    var risk = document.getElementById('mRisk');
+    risk.textContent = riskBad ? 'HIGH' : 'None';
+    risk.className = 'v tnum ' + (riskBad ? 'risk-bad' : 'risk-ok');
+    set('mRecover', recover + '%', rBad);
+    set('mEdit', editScore + '%', eBad);
+
+    renderSnip();
+    drawArch();
+    log('Run complete.', 'step');
+  }
+  function set(id, val, bad){ var el = document.getElementById(id); el.textContent = val; el.classList.toggle('is-bad', !!bad); }
+  function setMeter(id, frac, bad){ var m = document.getElementById(id); m.classList.toggle('is-bad', !!bad); m.firstElementChild.style.width = Math.min(100, frac*100) + '%'; }
+  function reset(){
+    logEl.innerHTML = '';
+    // restore controls to the anti-pattern starting config
+    state.scope = 'user'; state.secret = 'inline'; state.tool = 'read'; state.resources = false;
+    state.err = 'swallow'; state.edit = 'blind';
+    document.getElementById('scopeProject').setAttribute('aria-pressed','false');
+    document.getElementById('scopeUser').setAttribute('aria-pressed','true');
+    document.getElementById('secEnv').setAttribute('aria-pressed','false');
+    document.getElementById('secInline').setAttribute('aria-pressed','true');
+    document.getElementById('editCtx').setAttribute('aria-pressed','false');
+    document.getElementById('editSed').setAttribute('aria-pressed','false');
+    document.getElementById('editBlind').setAttribute('aria-pressed','true');
+    document.getElementById('cfgResources').checked = false;
+    document.getElementById('cfgTool').value = 'read';
+    document.getElementById('cfgErr').value = 'swallow';
+    set('mSetup','—',false); set('mExpl','—',false); set('mSearch','—',false);
+    set('mRecover','—',false); set('mEdit','—',false);
+    var risk = document.getElementById('mRisk'); risk.textContent = '—'; risk.className = 'v tnum';
+    setMeter('setupMeter',0,false);
+    renderSnip();
+    drawArch();
+  }
+
+  document.getElementById('runBtn').addEventListener('click', run);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  // ── Canvas diagram (hairline ink on paper; red only on a fault) ─────────
+  function drawArch(){
+    var c = document.getElementById('arch'), x = c.getContext('2d');
+    state.resources = document.getElementById('cfgResources').checked;
+    state.tool = document.getElementById('cfgTool').value;
+    state.err = document.getElementById('cfgErr').value;
+    var scopeBad = state.scope === 'user';
+    var secretBad = state.secret === 'inline';
+    var errBad = state.err !== 'structured';
+
+    x.clearRect(0,0,c.width,c.height);
+    x.lineWidth = 1.5;
+    x.font = '13px "FDJR Text", system-ui, sans-serif';
+    var INK = '#000', GREY = '#1a1a1a', RED = '#ed1c24';
+
+    function box(bx,by,bw,bh,label,sub,bad){
+      x.strokeStyle = bad ? RED : INK;
+      x.strokeRect(bx,by,bw,bh);
+      x.fillStyle = bad ? RED : INK;
+      x.font = '600 13px "FDJR Text", system-ui, sans-serif';
+      x.fillText(label, bx+12, by+24);
+      if(sub){
+        x.fillStyle = bad ? RED : '#6b675f';
+        x.font = '11px "FDJR Text", system-ui, sans-serif';
+        x.fillText(sub, bx+12, by+42);
+      }
+    }
+    function arrow(x1,y1,x2,y2,bad){
+      x.strokeStyle = bad ? RED : GREY;
+      x.beginPath(); x.moveTo(x1,y1); x.lineTo(x2,y2); x.stroke();
+      var a = Math.atan2(y2-y1, x2-x1);
+      x.beginPath();
+      x.moveTo(x2,y2);
+      x.lineTo(x2 - 8*Math.cos(a - 0.4), y2 - 8*Math.sin(a - 0.4));
+      x.lineTo(x2 - 8*Math.cos(a + 0.4), y2 - 8*Math.sin(a + 0.4));
+      x.closePath(); x.fillStyle = bad ? RED : GREY; x.fill();
+    }
+
+    // Claude Code core
+    box(40, 150, 180, 78, 'Claude Code', 'agent / tool loop', false);
+
+    // Built-in tools cluster
+    box(300, 30, 200, 60, 'Built-in tools', 'Grep · Glob · Read · Write · Edit · Bash', false);
+    // highlight chosen search tool note
+    x.fillStyle = '#6b675f'; x.font = '11px "FDJR Text", system-ui, sans-serif';
+    x.fillText('chosen: ' + state.tool, 312, 102);
+
+    // MCP server
+    box(300, 150, 200, 78, 'GitHub MCP server', scopeBad ? 'user scope — not shared' : 'project .mcp.json — shared', scopeBad);
+
+    // Secret store
+    box(300, 280, 200, 60, secretBad ? 'Inline key in .mcp.json' : '${GITHUB_TOKEN} env', secretBad ? 'committed plaintext secret' : 'expanded from environment', secretBad);
+
+    // MCP resources
+    box(560, 150, 200, 78, 'MCP resources', state.resources ? 'catalog ON — fewer probes' : 'catalog OFF — many probes', false);
+
+    // 503 error path: how the tool reports a transient failure
+    var errSub = state.err === 'structured' ? 'transient · isRetryable: agent retries'
+               : state.err === 'stack' ? 'raw stack trace — no recovery signal'
+               : 'swallowed — empty success hides it';
+    box(560, 280, 200, 60, '503 error path', errSub, errBad);
+
+    // arrows
+    arrow(220, 175, 300, 70, false);                 // Claude Code -> built-in tools
+    arrow(220, 189, 300, 189, false);                // Claude Code -> MCP server
+    arrow(400, 228, 400, 280, secretBad);            // MCP server -> secret store
+    arrow(500, 189, 560, 189, false);                // MCP server -> resources
+    arrow(620, 228, 620, 280, errBad);               // resources/server -> 503 error path
+
+    // status caption
+    x.font = '600 12px "FDJR Text", system-ui, sans-serif';
+    if(scopeBad || secretBad || errBad){
+      var faults = [];
+      if(secretBad) faults.push('inline secret committed to git');
+      if(scopeBad) faults.push('server at user scope — teammates lack it');
+      if(errBad) faults.push('503 not returned as a structured retryable error');
+      x.fillStyle = RED;
+      x.fillText('Fault: ' + faults.join('  ·  '), 40, 366);
+    } else {
+      x.fillStyle = GREY;
+      x.fillText('Healthy: shared project config, env-var secret, structured retryable errors.', 40, 366);
+    }
+  }
+
+  // ── Knowledge check ─────────────────────────────────────────────────────
+  var KC = [
+    {
+      q: 'A team\'s GitHub MCP server should be available to everyone who clones the repo. Where must its config live?',
+      options: [
+        'Project .mcp.json committed at the repo root',
+        'User scope ~/.claude.json, set up once per individual developer machine',
+        'In CLAUDE.md alongside the project instructions',
+        'In a .claude/config.json file'
+      ],
+      correct: 0,
+      explain: 'Project-scoped .mcp.json is committed to git, so it reaches every teammate on clone; ~/.claude.json is personal and never shared.'
+    },
+    {
+      q: 'How should the MCP server\'s auth token be stored in .mcp.json to avoid leaking a secret?',
+      options: [
+        'Reference it as ${GITHUB_TOKEN} for environment expansion',
+        'Paste the raw API key inline for reliability',
+        'Base64-encode the key inline so it stays out of plaintext in the committed file',
+        'Put the key in CLAUDE.md instead of .mcp.json'
+      ],
+      correct: 0,
+      explain: '${ENV_VAR} expansion keeps the credential out of version control; an inline key (even encoded) is committed and leaks.'
+    },
+    {
+      q: 'You must find every file that imports @company/auth across a large monorepo. Which built-in tool fits?',
+      options: [
+        'Grep — searches contents for the import',
+        'Glob — matches file names and paths',
+        'Read — open each file to inspect it',
+        'Bash running find piped through xargs into a grep search'
+      ],
+      correct: 0,
+      explain: 'Grep searches file contents in one pass; Glob only matches names, Read forces reading every file, and Bash needlessly leaves the built-in tool layer.'
+    },
+    {
+      q: 'What is the main benefit of exposing a server\'s issue/PR catalog as MCP resources?',
+      options: [
+        'It cuts the exploratory tool calls the agent makes to discover content',
+        'It encrypts the connection between Claude Code and the remote server transport',
+        'It forces the model to prefer MCP tools over built-in tools',
+        'It removes the need to configure an auth token'
+      ],
+      correct: 0,
+      explain: 'Resources expose a content catalog the agent reads directly, so it stops probing blindly with many exploratory tool calls.'
+    },
+    {
+      q: 'An MCP tool hits a transient 503 from its backend. What should it return so the agent can recover well?',
+      options: [
+        'A structured error: errorCategory transient, isRetryable true',
+        'An empty result set with a success status, so the conversation keeps flowing instead of surfacing the failure to the coordinator',
+        'The raw stack trace string straight from the underlying HTTP client library',
+        'Nothing — let the exception propagate up and terminate the whole agent workflow at the top level'
+      ],
+      correct: 0,
+      explain: 'A transient 503 is retryable, so errorCategory and isRetryable let the agent retry rather than swallow the failure, dump a stack trace, or crash the workflow.'
+    },
+    {
+      q: 'Edit fails because the anchor string you want to change appears three times in the config file. What is the sound fix?',
+      options: [
+        'Read the surrounding lines, then Edit with a unique anchor',
+        'Retry the same blind Edit a few more times until one of the three matches happens to take effect on the right line',
+        'Use Bash sed targeting the hardcoded line number, which is the most flexible option for any ambiguous edit in a file',
+        'Switch to Glob to locate the correct occurrence and then apply the change from there'
+      ],
+      correct: 0,
+      explain: 'Edit needs a unique anchor; reading the surrounding context lets you build one and target the right occurrence — a blind retry stays ambiguous and sed-by-line is brittle.'
+    }
+  ];
+  function renderKC(){
+    var host = document.getElementById('kcHost'); host.innerHTML = '';
+    KC.forEach(function(item, idx){
+      var q = document.createElement('p'); q.className = 'kc-q';
+      q.textContent = (idx+1) + '. ' + item.q; host.appendChild(q);
+      var answered = false;
+      item.options.forEach(function(opt, i){
+        var b = document.createElement('button'); b.className = 'kc-opt'; b.type = 'button'; b.textContent = opt;
+        b.addEventListener('click', function(){
+          if(answered) return; answered = true;
+          item._els.forEach(function(o, j){
+            o.disabled = true;
+            o.dataset.state = j === item.correct ? 'correct' : (j === i ? 'wrong' : 'muted');
+          });
+          var e = document.createElement('div'); e.className = 'kc-exp';
+          e.textContent = (i === item.correct ? 'Correct. ' : 'Not quite. ') + item.explain;
+          item._after.appendChild(e);
+        });
+        host.appendChild(b);
+        (item._els = item._els || []).push(b);
+      });
+      var after = document.createElement('div'); item._after = after; host.appendChild(after);
+    });
+  }
+
+  // ── Reduced-motion guard ────────────────────────────────────────────────
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    var m = document.getElementById('setupMeter');
+    if(m && m.firstElementChild) m.firstElementChild.style.transition = 'none';
+  }
+
+  // ── init ────────────────────────────────────────────────────────────────
+  reset(); renderSnip(); renderKC();
+})();
+</script>
+</body>
+</html>

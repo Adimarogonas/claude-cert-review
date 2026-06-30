@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulator Template — CarbonSilicon</title>
+<link rel="stylesheet" href="/simulations/csl-sim.css">
+<style>
+  /* sim-specific CSS only — lean on csl-sim.css for everything brand-level */
+  .arch-wrap{ position:relative }
+  .run-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px }
+</style>
+</head>
+<body>
+<main class="sim">
+
+  <div class="sim-head-row">
+    <div>
+      <div class="sim-eyebrow">Domain N · Interactive Simulation</div>
+      <h1 class="sim-title">Simulator Title</h1>
+    </div>
+    <button class="btn btn--ghost help-btn" id="helpBtn" aria-haspopup="dialog">? Help</button>
+  </div>
+  <p class="sim-deck">One or two sentences framing the scenario and what the learner is deciding.</p>
+
+  <div class="tabs" role="tablist" aria-label="Simulator sections">
+    <button class="tab" role="tab" id="t-sim"  aria-controls="p-sim"  aria-selected="true">Simulate</button>
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="false">Architecture</button>
+    <button class="tab" role="tab" id="t-kc"   aria-controls="p-kc"   aria-selected="false">Knowledge Check</button>
+  </div>
+
+  <!-- ── Simulate ──────────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-sim" role="tabpanel" aria-labelledby="t-sim">
+    <div class="cols cols-2">
+      <div class="panel">
+        <p class="panel-label">Configuration</p>
+
+        <label class="toggle" style="margin-bottom:14px">
+          <input type="checkbox" id="cfgHook">
+          <span class="track"></span>
+          <span>Enforce the rule with a PreToolUse hook</span>
+        </label>
+
+        <div class="field">
+          <label for="cfgMode">Termination signal</label>
+          <select id="cfgMode">
+            <option value="stop">stop_reason == "end_turn"</option>
+            <option value="cap">fixed iteration cap</option>
+            <option value="text">parse "DONE" from text</option>
+          </select>
+          <span class="hint">The control signal that decides when the loop stops.</span>
+        </div>
+
+        <div class="run-row">
+          <button class="btn btn--primary" id="runBtn">▶ Run</button>
+          <button class="btn btn--ghost" id="resetBtn">↺ Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-label">Outcome</p>
+        <div class="metrics" id="metrics">
+          <div class="metric"><div class="v tnum" id="mResolve">—</div><div class="k">Resolution</div></div>
+          <div class="metric"><div class="v tnum" id="mError">—</div><div class="k">Error rate</div></div>
+          <div class="metric"><div class="v tnum" id="mSteps">—</div><div class="k">Avg steps</div></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="meter" id="ctxMeter"><i></i></div>
+          <div class="metric" style="padding:6px 0 0"><div class="k">Context window usage</div></div>
+        </div>
+        <div class="log" id="log" style="margin-top:12px" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+    <div class="panel arch-wrap">
+      <p class="panel-label">System diagram</p>
+      <canvas id="arch" width="820" height="360" aria-label="Architecture diagram"></canvas>
+    </div>
+  </section>
+
+  <!-- ── Knowledge Check ───────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-kc" role="tabpanel" aria-labelledby="t-kc" hidden>
+    <div class="panel" id="kcHost"></div>
+  </section>
+
+</main>
+
+<!-- ── Help overlay ────────────────────────────────────────────────────── -->
+<div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <h2 id="helpTitle">How this simulation works</h2>
+    <ol>
+      <li>Set the <strong>configuration</strong> on the left.</li>
+      <li>Press <strong>Run</strong> and watch the metrics respond.</li>
+      <li>Find the configuration that maximizes resolution and minimizes error.</li>
+    </ol>
+    <button class="btn btn--primary" id="helpClose">Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function selectTab(tab){
+    tabs.forEach(function(t){
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+  }
+  tabs.forEach(function(t){ t.addEventListener('click', function(){ selectTab(t); }); });
+
+  // ── Help ───────────────────────────────────────────────────────────────
+  var help = document.getElementById('help');
+  document.getElementById('helpBtn').addEventListener('click', function(){ help.hidden = false; });
+  document.getElementById('helpClose').addEventListener('click', function(){ help.hidden = true; });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') help.hidden = true; });
+
+  // ── Log helper ─────────────────────────────────────────────────────────
+  var logEl = document.getElementById('log'), step = 0;
+  function log(msg, cls){
+    var d = document.createElement('div');
+    d.className = 'log-line' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<span class="t">' + String(++step).padStart(2,'0') + '</span>  ' + msg;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ── Model: config → deterministic consequences (THIS is the teaching core)
+  function run(){
+    logEl.innerHTML=''; step=0;
+    var hook = document.getElementById('cfgHook').checked;
+    var mode = document.getElementById('cfgMode').value;
+
+    var resolve = 0.62, error = 0.09, steps = 11, ctx = 0.4;
+    if(mode === 'stop'){ log('Loop driven by stop_reason — terminates on end_turn.', 'step'); }
+    else if(mode === 'cap'){ error += 0.10; steps = 18; log('Fixed cap truncates complex cases mid-task.', 'bad'); }
+    else { error += 0.14; log('Parsing "DONE" from text — brittle, model-phrasing dependent.', 'bad'); }
+
+    if(hook){ resolve += 0.18; error = Math.max(0.01, error - 0.07); log('PreToolUse hook hard-blocks the unsafe call.', 'step'); }
+    else { log('No deterministic guard — the rule can be reasoned around.', 'bad'); }
+
+    set('mResolve', Math.round(resolve*100)+'%');
+    set('mError', Math.round(error*100)+'%', error > 0.12);
+    set('mSteps', steps);
+    meter('ctxMeter', ctx, ctx > 0.85);
+    log('Run complete.', 'step');
+  }
+  function set(id, val, bad){ var el=document.getElementById(id); el.textContent=val; el.classList.toggle('is-bad', !!bad); }
+  function meter(id, frac, bad){ var m=document.getElementById(id); m.classList.toggle('is-bad', !!bad); m.firstElementChild.style.width=Math.min(100,frac*100)+'%'; }
+  function reset(){ logEl.innerHTML=''; ['mResolve','mError','mSteps'].forEach(function(i){ set(i,'—',false); }); meter('ctxMeter',0,false); }
+
+  document.getElementById('runBtn').addEventListener('click', run);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  // ── Canvas diagram (hairline ink on paper) ─────────────────────────────
+  function drawArch(){
+    var c = document.getElementById('arch'), x = c.getContext('2d');
+    x.clearRect(0,0,c.width,c.height);
+    x.strokeStyle='#000'; x.fillStyle='#1a1a1a'; x.lineWidth=1.5;
+    x.font='13px "FDJR Text", sans-serif';
+    function box(bx,by,bw,bh,label){ x.strokeRect(bx,by,bw,bh); x.fillStyle='#000'; x.fillText(label,bx+12,by+24); }
+    box(40,150,150,60,'Coordinator');
+    box(330,60,150,60,'Subagent A');
+    box(330,240,150,60,'Subagent B');
+    x.beginPath(); x.moveTo(190,180); x.lineTo(330,90); x.moveTo(190,180); x.lineTo(330,270); x.stroke();
+  }
+
+  // ── Knowledge check (one example question) ─────────────────────────────
+  var KC = [{
+    q: 'Which signal should drive loop termination?',
+    options: ['stop_reason == "end_turn"', 'A fixed iteration cap', 'Parsing "DONE" from the text'],
+    correct: 0,
+    explain: 'stop_reason is the canonical, reliable termination signal. Caps are a safety backstop; text parsing is brittle.'
+  }];
+  function renderKC(){
+    var host = document.getElementById('kcHost'); host.innerHTML='';
+    KC.forEach(function(item){
+      var q = document.createElement('p'); q.className='kc-q'; q.textContent=item.q; host.appendChild(q);
+      item.options.forEach(function(opt,i){
+        var b=document.createElement('button'); b.className='kc-opt'; b.textContent=opt;
+        b.addEventListener('click', function(){
+          Array.prototype.forEach.call(host.querySelectorAll('.kc-opt'), function(o,j){
+            o.disabled=true; o.dataset.state = j===item.correct ? 'correct' : (j===i ? 'wrong' : 'muted');
+          });
+          var e=document.createElement('div'); e.className='kc-exp'; e.textContent=item.explain; host.appendChild(e);
+        });
+        host.appendChild(b);
+      });
+    });
+  }
+
+  // init
+  reset(); drawArch(); renderKC();
+})();
+</script>
+</body>
+</html>

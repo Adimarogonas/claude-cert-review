@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Designing the MCP Tool Layer — CarbonSilicon Labs</title>
+<link rel="stylesheet" href="/simulations/csl-sim.css">
+<style>
+  /* sim-specific CSS only — everything brand-level comes from csl-sim.css */
+  .arch-wrap{ position:relative }
+  .run-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px }
+  .cfg-group{ border:none; margin:0 0 16px; padding:0 }
+  .cfg-group legend{ font-size:12px; font-weight:600; color:var(--carbon); padding:0; margin-bottom:8px }
+  .cfg-group .hint{ font-size:11.5px; color:var(--ink-2); line-height:1.45; margin:6px 0 0 }
+  .metric .d.is-bad{ color:var(--alps); font-weight:600 }
+  .kc-exp.is-bad{ border-left-color:var(--alps) }
+  .legend-key{ display:flex; gap:16px; flex-wrap:wrap; margin:10px 0 0; font-size:11.5px; color:var(--ink-2) }
+  .legend-key span{ display:inline-flex; align-items:center; gap:6px }
+  .legend-key i{ width:12px; height:2px; background:var(--monolith); display:inline-block }
+  .legend-key i.alps{ background:var(--alps); height:0; border-top:2px dashed var(--alps); width:14px }
+  .seg-wrap{ display:flex; flex-direction:column; gap:6px }
+  .seg-wrap .seg{ max-width:100% }
+  .seg-wrap .seg button{ flex:1 }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{ transition-duration:0.001ms !important; animation-duration:0.001ms !important; }
+  }
+</style>
+</head>
+<body>
+<main class="sim">
+
+  <div class="sim-head-row">
+    <div>
+      <div class="sim-eyebrow">Domain 2 · Interactive Simulation</div>
+      <h1 class="sim-title">Designing the MCP Tool Layer</h1>
+    </div>
+    <button class="btn btn--ghost help-btn" id="helpBtn" aria-haspopup="dialog">? Help</button>
+  </div>
+  <p class="sim-deck">ShipMind's agents query shipments, adjust routes, and file carrier claims through an internal carrier API exposed over MCP. Your tool granularity, naming, error shape, tool_choice, and agent scope decide whether selection is reliable, recovery works, and writes stay safe.</p>
+
+  <div class="tabs" role="tablist" aria-label="Simulator sections">
+    <button class="tab" role="tab" id="t-sim"  aria-controls="p-sim"  aria-selected="true">Simulate</button>
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="false" tabindex="-1">Architecture</button>
+    <button class="tab" role="tab" id="t-kc"   aria-controls="p-kc"   aria-selected="false" tabindex="-1">Knowledge Check</button>
+  </div>
+
+  <!-- ── Simulate ──────────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-sim" role="tabpanel" aria-labelledby="t-sim">
+    <div class="cols cols-2">
+      <div class="panel">
+        <p class="panel-label">Tool-layer configuration</p>
+
+        <fieldset class="cfg-group">
+          <legend>Tool granularity</legend>
+          <div class="seg-wrap">
+            <div class="seg" role="group" aria-label="Tool granularity">
+              <button type="button" id="granSplit" aria-pressed="false">Two distinct tools</button>
+              <button type="button" id="granMode" aria-pressed="true">One tool + mode param</button>
+            </div>
+          </div>
+          <p class="hint">Status and billing as <code>get_shipment_status</code> / <code>get_shipment_billing</code>, or one <code>get_shipment(mode=…)</code>.</p>
+        </fieldset>
+
+        <fieldset class="cfg-group">
+          <legend>Naming &amp; descriptions</legend>
+          <div class="seg-wrap">
+            <div class="seg" role="group" aria-label="Naming and descriptions">
+              <button type="button" id="nameDesc" aria-pressed="false">Descriptive</button>
+              <button type="button" id="nameOpaque" aria-pressed="true">Opaque (lookup1 / lookup2)</button>
+            </div>
+          </div>
+          <p class="hint">Descriptions are the primary signal the model uses to pick a tool.</p>
+        </fieldset>
+
+        <div class="field">
+          <label for="cfgError">Error shape (write tool: <code>update_route</code>)</label>
+          <select id="cfgError">
+            <option value="structured">Structured — category + is_retryable + next step</option>
+            <option value="raw">Raw stack trace</option>
+            <option value="empty" selected>Empty body returned as success</option>
+          </select>
+          <span class="hint">A transient 503 must be distinguishable from a permanent failure.</span>
+        </div>
+
+        <div class="field">
+          <label for="cfgChoice">tool_choice for the extract-metadata step</label>
+          <select id="cfgChoice">
+            <option value="any">any — model must call some tool</option>
+            <option value="auto">auto — model may return text</option>
+            <option value="none" selected>none — no tool calls this turn</option>
+          </select>
+          <span class="hint">This step must produce a tool call to yield structured output.</span>
+        </div>
+
+        <fieldset class="cfg-group">
+          <legend>Static carrier reference catalog</legend>
+          <div class="seg-wrap">
+            <div class="seg" role="group" aria-label="Static carrier reference catalog">
+              <button type="button" id="catResource" aria-pressed="false">Expose as MCP resource (read once)</button>
+              <button type="button" id="catTool" aria-pressed="true">Add a lookup tool (re-queried)</button>
+            </div>
+          </div>
+          <p class="hint">The carrier-code &amp; service-level catalog is large and static. An MCP <em>resource</em> is read into context once; a <code>lookup_catalog</code> tool gets called again on every shipment.</p>
+        </fieldset>
+
+        <div class="field">
+          <label for="cfgReturn">Return shape (<code>get_shipment_status</code>)</label>
+          <select id="cfgReturn">
+            <option value="concise">Concise — only the structured fields the agent needs</option>
+            <option value="raw" selected>Full raw carrier payload (every field)</option>
+          </select>
+          <span class="hint">The carrier record has 60+ fields; the task needs ~6 (status, ETA, last_scan, exception_code…).</span>
+        </div>
+
+        <fieldset class="cfg-group">
+          <legend>Analyst agent scope</legend>
+          <div class="seg-wrap">
+            <div class="seg" role="group" aria-label="Analyst agent scope">
+              <button type="button" id="scopeLeast" aria-pressed="false">Least privilege (read-only)</button>
+              <button type="button" id="scopeWrite" aria-pressed="true">Full set incl. write tools</button>
+            </div>
+          </div>
+          <p class="hint">The analyst answers read-only questions; only the dispatcher should mutate state.</p>
+        </fieldset>
+
+        <div class="run-row">
+          <button class="btn btn--primary" id="runBtn">▶ Run</button>
+          <button class="btn btn--ghost" id="resetBtn">↺ Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-label">Outcome</p>
+        <div class="metrics" id="metrics">
+          <div class="metric"><div class="v tnum" id="mSelect">—</div><div class="k">Tool-selection accuracy</div></div>
+          <div class="metric"><div class="v tnum" id="mRecover">—</div><div class="k">Error-recovery rate</div></div>
+          <div class="metric"><div class="v tnum" id="mWrong">—</div><div class="k">Wrong-tool calls</div></div>
+          <div class="metric"><div class="v tnum" id="mRisk">—</div><div class="k">Unsafe-write risk</div></div>
+          <div class="metric"><div class="v tnum" id="mTokens">—</div><div class="k">Tokens / task</div></div>
+          <div class="metric"><div class="v tnum" id="mExplore">—</div><div class="k">Exploratory tool calls</div></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="meter" id="riskMeter"><i></i></div>
+          <div class="metric" style="padding:6px 0 0"><div class="k">Unsafe-write risk</div></div>
+        </div>
+        <div class="log" id="log" style="margin-top:12px" role="log" aria-live="polite" aria-label="Consequence log"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+    <div class="panel arch-wrap">
+      <p class="panel-label">Agent ↔ MCP tool layer</p>
+      <canvas id="arch" width="820" height="380" aria-label="Diagram: analyst and dispatcher agents connect through an MCP server to carrier-API tools. The currently flagged tool — overloaded, opaque, or unsafely write-scoped — is drawn in Alps red."></canvas>
+      <div class="legend-key" aria-hidden="true">
+        <span><i></i> healthy edge / tool</span>
+        <span><i class="alps"></i> flagged: overloaded, opaque, or unsafe-write</span>
+      </div>
+      <p class="hint" style="margin-top:10px">The diagram updates with your configuration. Re-run on the Simulate tab, then return here to see which element is flagged.</p>
+    </div>
+  </section>
+
+  <!-- ── Knowledge Check ───────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-kc" role="tabpanel" aria-labelledby="t-kc" hidden>
+    <div class="panel" id="kcHost"></div>
+  </section>
+
+</main>
+
+<!-- ── Help overlay ────────────────────────────────────────────────────── -->
+<div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <h2 id="helpTitle">How this simulation works</h2>
+    <ol>
+      <li>Set the <strong>tool-layer choices</strong> on the left.</li>
+      <li>Press <strong>Run</strong>. The metrics and consequence log respond deterministically.</li>
+      <li>Each gotcha visibly degrades a metric and turns it <strong>red</strong>. Find the config that maximizes selection accuracy and recovery while keeping unsafe-write risk at zero.</li>
+      <li>Open <strong>Architecture</strong> to see which tool is flagged, then <strong>Knowledge Check</strong> to test the gotchas.</li>
+    </ol>
+    <button class="btn btn--primary" id="helpClose">Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function selectTab(tab){
+    tabs.forEach(function(t){
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if(tab.id === 't-arch') drawArch();
+  }
+  tabs.forEach(function(t, i){
+    t.addEventListener('click', function(){ selectTab(t); });
+    t.addEventListener('keydown', function(e){
+      var n = null;
+      if(e.key === 'ArrowRight') n = tabs[(i+1) % tabs.length];
+      else if(e.key === 'ArrowLeft') n = tabs[(i-1+tabs.length) % tabs.length];
+      if(n){ e.preventDefault(); n.focus(); selectTab(n); }
+    });
+  });
+
+  // ── Help ───────────────────────────────────────────────────────────────
+  var help = document.getElementById('help'), helpBtn = document.getElementById('helpBtn');
+  helpBtn.addEventListener('click', function(){ help.hidden = false; document.getElementById('helpClose').focus(); });
+  document.getElementById('helpClose').addEventListener('click', function(){ help.hidden = true; helpBtn.focus(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && !help.hidden){ help.hidden = true; helpBtn.focus(); } });
+
+  // ── Two-button segmented toggles (boolean state) ───────────────────────
+  function pair(aId, bId, defFirst){
+    var a = document.getElementById(aId), b = document.getElementById(bId);
+    function setA(on){ a.setAttribute('aria-pressed', on?'true':'false'); b.setAttribute('aria-pressed', on?'false':'true'); }
+    a.addEventListener('click', function(){ setA(true); });
+    b.addEventListener('click', function(){ setA(false); });
+    return { first: function(){ return a.getAttribute('aria-pressed') === 'true'; }, reset: function(){ setA(!!defFirst); } };
+  }
+  // default state is the ANTI-PATTERN (second button) so the learner starts degraded and must optimize
+  var gran  = pair('granSplit','granMode', false);   // first => two distinct tools (good); default => mode param (bad)
+  var name_ = pair('nameDesc','nameOpaque', false);  // first => descriptive (good); default => opaque (bad)
+  var scope = pair('scopeLeast','scopeWrite', false); // first => least privilege (good); default => write tools (bad)
+  var cat   = pair('catResource','catTool', false);  // first => MCP resource (good); default => re-queried tool (bad)
+
+  // ── Log helper ─────────────────────────────────────────────────────────
+  var logEl = document.getElementById('log'), step = 0;
+  function log(msg, cls){
+    var d = document.createElement('div');
+    d.className = 'log-line' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<span class="t">' + String(++step).padStart(2,'0') + '</span>  ' + msg;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ── State surfaced to the canvas ───────────────────────────────────────
+  var flags = { overloaded:false, opaque:false, unsafe:false, catTool:false, bloated:false };
+
+  // ── Model: config → deterministic metrics (the teaching core) ──────────
+  function run(){
+    logEl.innerHTML = ''; step = 0;
+    var twoTools = gran.first();
+    var descriptive = name_.first();
+    var errShape = document.getElementById('cfgError').value;
+    var choice = document.getElementById('cfgChoice').value;
+    var leastPriv = scope.first();
+    var catResource = cat.first();
+    var returnShape = document.getElementById('cfgReturn').value;
+
+    // baselines
+    var select = 0.95;   // tool-selection accuracy
+    var recover = 0.92;  // error-recovery rate
+    var wrong = 0;       // wrong-tool calls per 100
+    var risk = 0.0;      // unsafe-write risk (0..1)
+    var tokens = 1850;
+    var explore = 2;     // exploratory tool calls per task
+
+    flags = { overloaded:false, opaque:false, unsafe:false };
+
+    // (a) granularity
+    if(twoTools){
+      log('Two distinct tools: get_shipment_status / get_shipment_billing. Clear boundary — model selects correctly first try.', 'step');
+    } else {
+      select -= 0.22; wrong += 14; tokens += 120; flags.overloaded = true;
+      log('One overloaded get_shipment(mode=…): model passes the wrong mode or omits it; merged return shape hides failures.', 'bad');
+    }
+
+    // (b) naming / descriptions
+    if(descriptive){
+      log('Descriptive names + rich descriptions (inputs, when-to-use, not interchangeable) drive correct routing.', 'step');
+    } else {
+      select -= 0.20; wrong += 12; flags.opaque = true;
+      log('Opaque lookup1 / lookup2: the model guesses from schemas alone and confuses the two — systematic misrouting.', 'bad');
+    }
+
+    // (c) error shape (recovery)
+    if(errShape === 'structured'){
+      log('Structured error: errorCategory + is_retryable + suggested next step. Agent retries transient 503, stops on permanent.', 'step');
+    } else if(errShape === 'raw'){
+      recover -= 0.40; tokens += 240;
+      log('Raw stack trace: agent can\'t parse it into an action, so it abandons the task or hallucinates a result.', 'bad');
+    } else { // empty-as-success
+      recover -= 0.55; risk += 0.30;
+      log('Empty body returned as success: agent believes the route updated when it did not — phantom downstream state.', 'bad');
+    }
+
+    // (d) tool_choice for the must-call step
+    if(choice === 'any'){
+      log('tool_choice "any": the extract-metadata step is guaranteed to emit a tool call, so structured output is produced.', 'step');
+    } else if(choice === 'auto'){
+      select -= 0.08; recover -= 0.05;
+      log('tool_choice "auto": the model may return conversational text instead of the required tool call — step can stall.', 'bad');
+    } else { // none
+      select -= 0.18; recover -= 0.08;
+      log('tool_choice "none": tool use is blocked this turn, so the step that must call a tool cannot run at all.', 'bad');
+    }
+
+    // (e) agent scope
+    if(leastPriv){
+      log('Analyst scoped read-only: structurally incapable of mutating production state regardless of any prompt.', 'step');
+    } else {
+      risk += 0.55; flags.unsafe = true;
+      log('Read-only analyst given write tools: an exploratory query can call update_route and mutate production state.', 'bad');
+    }
+
+    // (f) static reference catalog: MCP resource vs re-queried tool
+    if(catResource){
+      log('Carrier-code catalog exposed as an MCP resource: read into context once, then reused for every shipment — no repeat calls.', 'step');
+    } else {
+      explore += 6; tokens += 900; flags.catTool = true;
+      log('Catalog behind a lookup_catalog tool: the model re-queries the same static reference on every shipment — exploratory calls and tokens balloon.', 'bad');
+    }
+
+    // (g) return shape: concise structured fields vs full raw payload
+    if(returnShape === 'concise'){
+      log('Return trimmed to the ~6 needed fields (status, ETA, last_scan, exception_code…): tight context, sharp tool selection.', 'step');
+    } else {
+      tokens += 1300; select -= 0.10; wrong += 4; flags.bloated = true;
+      log('Full 60+-field raw carrier payload dumped per call: tokens bloat, context dilutes, and the noise degrades downstream tool selection.', 'bad');
+    }
+
+    // clamp
+    select = Math.max(0.30, Math.min(0.99, select));
+    recover = Math.max(0.10, Math.min(0.99, recover));
+    risk = Math.max(0, Math.min(1, risk));
+
+    // thresholds for redness
+    set('mSelect', Math.round(select*100)+'%', select < 0.80);
+    set('mRecover', Math.round(recover*100)+'%', recover < 0.70);
+    set('mWrong', wrong, wrong > 0);
+    set('mRisk', risk <= 0.001 ? 'None' : Math.round(risk*100)+'%', risk > 0.001);
+    set('mTokens', tokens.toLocaleString(), tokens > 2300);
+    set('mExplore', explore, explore > 3);
+    meter('riskMeter', risk, risk > 0.001);
+
+    var clean = twoTools && descriptive && errShape==='structured' && choice==='any' && leastPriv && catResource && returnShape==='concise';
+    log(clean ? 'Run complete — reliable selection, graceful recovery, zero unsafe-write risk.'
+              : 'Run complete — see the red lines above for what degraded.', clean ? 'step' : 'bad');
+
+    drawArch();
+  }
+
+  function set(id, val, bad){ var el = document.getElementById(id); el.textContent = val; el.classList.toggle('is-bad', !!bad); }
+  function meter(id, frac, bad){ var m = document.getElementById(id); m.classList.toggle('is-bad', !!bad); m.firstElementChild.style.width = Math.min(100, frac*100)+'%'; }
+
+  function reset(){
+    logEl.innerHTML = ''; step = 0;
+    gran.reset(); name_.reset(); scope.reset(); cat.reset();
+    document.getElementById('cfgError').value = 'empty';
+    document.getElementById('cfgChoice').value = 'none';
+    document.getElementById('cfgReturn').value = 'raw';
+    ['mSelect','mRecover','mWrong','mRisk','mTokens','mExplore'].forEach(function(i){ set(i,'—',false); });
+    meter('riskMeter', 0, false);
+    flags = { overloaded:false, opaque:false, unsafe:false };
+    drawArch();
+  }
+
+  document.getElementById('runBtn').addEventListener('click', run);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  // ── Canvas: hairline ink on paper; only flagged element in Alps red ────
+  var INK = '#000', INK2 = '#6b675f', ALPS = '#ed1c24';
+  function drawArch(){
+    var c = document.getElementById('arch');
+    if(!c) return;
+    var x = c.getContext('2d');
+    x.clearRect(0,0,c.width,c.height);
+    x.lineWidth = 1.4;
+    x.font = '13px "FDJR Text", system-ui, sans-serif';
+    x.textBaseline = 'middle';
+
+    function box(bx,by,bw,bh,label,sub,danger){
+      x.strokeStyle = danger ? ALPS : INK;
+      x.setLineDash(danger ? [5,4] : []);
+      x.strokeRect(bx,by,bw,bh);
+      x.setLineDash([]);
+      x.fillStyle = danger ? ALPS : INK;
+      x.fillText(label, bx+12, by+ (sub?20:bh/2));
+      if(sub){ x.fillStyle = danger ? ALPS : INK2; x.font='11px "FDJR Text", system-ui, sans-serif'; x.fillText(sub, bx+12, by+38); x.font='13px "FDJR Text", system-ui, sans-serif'; }
+    }
+    function edge(x1,y1,x2,y2,danger){
+      x.strokeStyle = danger ? ALPS : INK2;
+      x.setLineDash(danger ? [5,4] : []);
+      x.beginPath(); x.moveTo(x1,y1); x.lineTo(x2,y2); x.stroke();
+      x.setLineDash([]);
+    }
+
+    // Agents (left)
+    box(30,70,160,56,'Analyst agent','read-only', flags.unsafe);
+    box(30,250,160,56,'Dispatcher agent','read + write', false);
+
+    // MCP server (middle)
+    box(330,160,160,60,'MCP server','carrier API', false);
+
+    // Catalog: MCP resource (healthy) vs re-queried lookup tool (flagged)
+    box(330,300,160,52, flags.catTool ? 'lookup_catalog tool' : 'catalog resource', flags.catTool ? 're-queried' : 'read once', flags.catTool);
+    edge(410,300,410,220, flags.catTool); // catalog <-> MCP server spine
+
+    // Tools (right)
+    var sx = 620, sw = 170;
+    box(sx, 40, sw, 50, flags.overloaded ? 'get_shipment(mode)' : 'get_shipment_status', flags.opaque ? '“lookup1”' : (flags.bloated ? 'raw payload' : (flags.overloaded ? 'overloaded' : 'status')), flags.overloaded || flags.opaque || flags.bloated);
+    box(sx, 110, sw, 50, flags.opaque ? 'lookup2' : 'get_shipment_billing', flags.opaque ? 'opaque' : 'billing', flags.opaque);
+    box(sx, 200, sw, 50, 'file_claim', 'write', false);
+    box(sx, 270, sw, 50, 'update_route', 'write', flags.unsafe);
+
+    // edges: agents -> MCP
+    edge(190,98,330,185, flags.unsafe);   // analyst (red if it can reach writes)
+    edge(190,278,330,195, false);          // dispatcher
+
+    // edges: MCP -> tools
+    edge(490,178,sx,65, flags.overloaded || flags.opaque || flags.bloated);
+    edge(490,186,sx,135, flags.opaque);
+    edge(490,196,sx,225, false);
+    edge(490,205,sx,295, flags.unsafe);
+  }
+
+  // ── Knowledge check (4 questions from the gotchas) ─────────────────────
+  var KC = [
+    {
+      q: 'Two tools, get_shipment_status and get_shipment_billing, get merged into one get_shipment with a mode parameter. What is the most likely consequence?',
+      options: [
+        'Fewer tools always improves selection, so routing accuracy reliably rises across every call.',
+        'The model passes the wrong mode or omits it, and the merged return shape hides failures.',
+        'Token cost drops enough to offset any selection loss.',
+        'Nothing changes — schemas fully determine selection.'
+      ],
+      correct: 1,
+      explain: 'An overloaded tool blurs the boundary the model relies on to choose correctly; wrong-mode calls appear and the conflated return shape makes failures hard to diagnose.'
+    },
+    {
+      q: 'A write tool hits a transient 503. Which error shape lets the agent recover gracefully?',
+      options: [
+        'A raw stack trace with full technical detail.',
+        'A success response with an empty body, with the underlying failure logged server-side only.',
+        'A structured error with a category and an is_retryable flag plus a suggested next step.',
+        'A generic string: "Error: could not update route."'
+      ],
+      correct: 2,
+      explain: 'Structured, machine-readable errors that distinguish retryable from terminal failures let the agent wait and retry the 503 instead of giving up or hallucinating; empty-as-success is the most dangerous because it fakes a write.'
+    },
+    {
+      q: 'An extraction step must always produce a tool call to yield structured output. Which tool_choice fits?',
+      options: [
+        'auto — let the model decide whether a tool is appropriate.',
+        'none — block tool use so the model stays focused.',
+        'any — require the model to call some tool this turn.',
+        'It makes no difference; tool_choice only affects logging.'
+      ],
+      correct: 2,
+      explain: 'tool_choice "any" guarantees a tool call (preventing conversational text); "auto" may return text and "none" blocks the call the step depends on.'
+    },
+    {
+      q: 'A read-only analyst agent is handed the full tool set, including update_route, with tool_choice on auto "for flexibility." What is the risk?',
+      options: [
+        'None — auto means it only writes when the conversation clearly calls for it.',
+        'An exploratory query can call update_route and mutate production state.',
+        'It is safe because the dispatcher also has the write tools.',
+        'tool_choice none would have been required to allow reads.'
+      ],
+      correct: 1,
+      explain: 'Capability, not runtime intent, enforces safety: auto is not a guardrail. Least-privilege scoping at the agent boundary makes the analyst structurally incapable of mutating state.'
+    },
+    {
+      q: 'A large, static carrier-code catalog is read on nearly every shipment. The agent keeps calling a lookup_catalog tool to fetch the same data again and again. What is the better MCP design?',
+      options: [
+        'Expose the catalog as an MCP resource the model reads into context once.',
+        'Keep the tool but raise its priority in the description so the model calls it sooner and more confidently each turn.',
+        'Cache the tool result in the agent prompt by pasting the full catalog into the system prompt on every single request.',
+        'Split lookup_catalog into several narrower lookup tools so each call returns less.'
+      ],
+      correct: 0,
+      explain: 'MCP resources expose static content catalogs that are read once and reused, eliminating the repeated exploratory tool calls a re-queried lookup tool incurs.'
+    },
+    {
+      q: 'get_shipment_status returns the carrier\'s full 60+-field raw record, but the task needs about six fields. What should the tool return?',
+      options: [
+        'The full raw payload, since the model can ignore the fields it does not need on its own.',
+        'Only the concise structured fields the task needs.',
+        'A prose paragraph summarizing all 60+ fields so nothing is technically dropped from the response.',
+        'The full payload, but base64-encoded so it occupies fewer visible lines in the transcript.'
+      ],
+      correct: 1,
+      explain: 'Returning only the needed structured fields keeps context tight and sharpens tool selection; dumping the full payload bloats tokens and dilutes context with irrelevant noise.'
+    }
+  ];
+
+  function renderKC(){
+    var host = document.getElementById('kcHost'); host.innerHTML = '';
+    KC.forEach(function(item, qi){
+      var fs = document.createElement('fieldset');
+      fs.className = 'cfg-group'; fs.style.marginBottom = '22px';
+      var lg = document.createElement('legend');
+      lg.className = 'kc-q'; lg.style.float = 'none'; lg.textContent = (qi+1) + '. ' + item.q;
+      fs.appendChild(lg);
+      item.options.forEach(function(opt, i){
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'kc-opt'; b.textContent = opt;
+        b.addEventListener('click', function(){
+          Array.prototype.forEach.call(fs.querySelectorAll('.kc-opt'), function(o, j){
+            o.disabled = true;
+            o.dataset.state = j === item.correct ? 'correct' : (j === i ? 'wrong' : 'muted');
+          });
+          var e = document.createElement('div');
+          e.className = 'kc-exp' + (i === item.correct ? '' : ' is-bad');
+          e.textContent = (i === item.correct ? 'Correct. ' : 'Not quite. ') + item.explain;
+          fs.appendChild(e);
+        });
+        fs.appendChild(b);
+      });
+      host.appendChild(fs);
+    });
+  }
+
+  // init
+  reset();
+  renderKC();
+})();
+</script>
+</body>
+</html>

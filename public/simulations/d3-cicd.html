@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CI Review Bot — Claude Code in CI/CD · CarbonSilicon</title>
+<link rel="stylesheet" href="/simulations/csl-sim.css">
+<style>
+  /* sim-specific CSS only — kit classes do the brand work */
+  .arch-wrap{ position:relative }
+  .run-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px }
+  .cli{ font-family:var(--mono); font-size:12px; line-height:1.7; background:var(--sunken);
+        border:1px solid var(--hair); border-radius:var(--r-sm); padding:.7rem .8rem;
+        margin:14px 0 0; overflow:auto; white-space:pre-wrap; color:var(--carbon) }
+  .cli .flag{ font-weight:700 }
+  .cli .bad{ color:var(--alps); font-weight:700 }
+  .verdict{ margin-top:14px; padding:.7rem .85rem; border:1px solid var(--hair-2);
+            border-radius:var(--r-sm); font-size:13px; line-height:1.55; background:var(--paper) }
+  .verdict.is-pass{ border-left:3px solid var(--carbon) }
+  .verdict.is-fail{ border-left:3px solid var(--alps); color:var(--alps) }
+  .kc-q + .kc-q-wrap{ margin-top:0 }
+  .kc-block{ padding-bottom:18px; margin-bottom:18px; border-bottom:1px solid var(--hair) }
+  .kc-block:last-child{ border-bottom:none; margin-bottom:0; padding-bottom:0 }
+  .legend{ display:flex; gap:16px; flex-wrap:wrap; margin-top:10px; font-size:11px; color:var(--ink-2) }
+  .legend span{ display:inline-flex; align-items:center; gap:6px }
+  .swatch{ width:11px; height:11px; border:1px solid var(--hair-2); display:inline-block }
+  .swatch.ink{ background:var(--carbon) }
+  .swatch.red{ background:var(--alps); border-color:var(--alps) }
+</style>
+</head>
+<body>
+<main class="sim">
+
+  <div class="sim-head-row">
+    <div>
+      <div class="sim-eyebrow">Domain 3 · Task 3.6 · Interactive Simulation</div>
+      <h1 class="sim-title">Standing Up a Nightly Review Bot in CI</h1>
+    </div>
+    <button class="btn btn--ghost help-btn" id="helpBtn" aria-haspopup="dialog">? Help</button>
+  </div>
+  <p class="sim-deck">You are wiring Claude Code into a nightly CI job that reviews the day's merges. Six configuration choices decide whether the job runs clean, parseable, and safely scoped — or hangs the pipeline, breaks your parser, pollutes every teammate's context, rubber-stamps its own code, hands automation the whole machine, or silently swallows the exit code so the build never fails.</p>
+
+  <div class="tabs" role="tablist" aria-label="Simulator sections">
+    <button class="tab" role="tab" id="t-sim"  aria-controls="p-sim"  aria-selected="true">Simulate</button>
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="false" tabindex="-1">Architecture</button>
+    <button class="tab" role="tab" id="t-kc"   aria-controls="p-kc"   aria-selected="false" tabindex="-1">Knowledge Check</button>
+  </div>
+
+  <!-- ── Simulate ──────────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-sim" role="tabpanel" aria-labelledby="t-sim">
+    <div class="cols cols-2">
+      <div class="panel">
+        <p class="panel-label">Pipeline configuration</p>
+
+        <div class="field">
+          <label for="cfgInvoke">Invocation mode</label>
+          <select id="cfgInvoke">
+            <option value="print">Headless &mdash; claude -p / --print</option>
+            <option value="interactive" selected>Default interactive &mdash; claude "&hellip;"</option>
+          </select>
+          <span class="hint">CI has no TTY. Interactive mode waits for input that never comes.</span>
+        </div>
+
+        <div class="field">
+          <label for="cfgOutput">Output format</label>
+          <select id="cfgOutput">
+            <option value="json">--output-format json</option>
+            <option value="stream">--output-format stream-json</option>
+            <option value="text" selected>--output-format text (default)</option>
+          </select>
+          <span class="hint">Your gate script parses findings programmatically before posting PR comments.</span>
+        </div>
+
+        <div class="field">
+          <label for="cfgPersona">Reviewer persona</label>
+          <select id="cfgPersona">
+            <option value="append">--append-system-prompt "reviewer rubric"</option>
+            <option value="mutate" selected>Edit the shared CLAUDE.md in the repo</option>
+          </select>
+          <span class="hint">How the bot gets its review rubric without affecting everyone else.</span>
+        </div>
+
+        <div class="field">
+          <label for="cfgSession">Review session</label>
+          <select id="cfgSession">
+            <option value="fresh">Fresh, independent session</option>
+            <option value="same" selected>Reuse the session that wrote the code</option>
+          </select>
+          <span class="hint">Who reads the diff: a fresh instance, or the author of the code?</span>
+        </div>
+
+        <div class="field">
+          <label for="cfgPerms">Tool permissions in CI</label>
+          <select id="cfgPerms">
+            <option value="allowlist">--allowedTools "Read Grep" (explicit allowlist)</option>
+            <option value="skip" selected>--dangerously-skip-permissions (allow everything)</option>
+          </select>
+          <span class="hint">Non-interactive CI can't answer permission prompts. Scope to the tools the review actually needs, or hand it the whole machine.</span>
+        </div>
+
+        <div class="field">
+          <label for="cfgGate">Build gating</label>
+          <select id="cfgGate">
+            <option value="exit">Fail the build on a non-zero exit code</option>
+            <option value="ignore" selected>Ignore exit code (job always &ldquo;passes&rdquo;)</option>
+          </select>
+          <span class="hint">Whether the run's exit code / structured result actually blocks the merge, or the step swallows it.</span>
+        </div>
+
+        <div class="run-row">
+          <button class="btn btn--primary" id="runBtn">&#9654; Run nightly job</button>
+          <button class="btn btn--ghost" id="resetBtn">&#8634; Reset</button>
+        </div>
+
+        <pre class="cli" id="cmd" aria-label="Generated CLI invocation"></pre>
+      </div>
+
+      <div class="panel">
+        <p class="panel-label">Outcome</p>
+        <div class="metrics" id="metrics">
+          <div class="metric"><div class="v tnum" id="mHang">&mdash;</div><div class="k">CI hang / timeout risk</div></div>
+          <div class="metric"><div class="v tnum" id="mParse">&mdash;</div><div class="k">Parse success</div></div>
+          <div class="metric"><div class="v tnum" id="mIndep">&mdash;</div><div class="k">Review independence</div></div>
+          <div class="metric"><div class="v tnum" id="mThru">&mdash;</div><div class="k">Throughput (PRs/run)</div></div>
+          <div class="metric"><div class="v tnum" id="mBlast">&mdash;</div><div class="k">Permission blast radius</div></div>
+          <div class="metric"><div class="v tnum" id="mGate">&mdash;</div><div class="k">Gate effectiveness</div></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="meter" id="parseMeter"><i></i></div>
+          <div class="metric" style="padding:6px 0 0"><div class="k">Parse-success of model output</div></div>
+        </div>
+        <div class="verdict" id="verdict" aria-live="polite">Set the configuration and press Run.</div>
+        <div class="log" id="log" style="margin-top:12px" role="log" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+    <div class="panel arch-wrap">
+      <p class="panel-label">CI pipeline stages</p>
+      <canvas id="arch" width="820" height="360" aria-label="CI pipeline diagram: checkout feeds claude with the print flag, which feeds a JSON parser, which feeds the merge gate. A tool-permissions node feeds the claude stage. Failure modes are flagged in red: running interactively hangs the job, mutating the shared CLAUDE.md pollutes every contributor's context, running with --dangerously-skip-permissions hands automation every tool, and ignoring the exit code makes the merge gate decorative so findings never fail the build."></canvas>
+      <div class="legend">
+        <span><span class="swatch ink"></span> Healthy stage / data flow</span>
+        <span><span class="swatch red"></span> Failure mode (Alps red)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Knowledge Check ───────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-kc" role="tabpanel" aria-labelledby="t-kc" hidden>
+    <div class="panel" id="kcHost"></div>
+  </section>
+
+</main>
+
+<!-- ── Help overlay ────────────────────────────────────────────────────── -->
+<div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <h2 id="helpTitle">How this simulation works</h2>
+    <ol>
+      <li>Pick an <strong>invocation mode</strong>, <strong>output format</strong>, <strong>reviewer persona</strong>, and <strong>review session</strong>.</li>
+      <li>Press <strong>Run nightly job</strong>. The CLI line and four metrics respond deterministically.</li>
+      <li>Find the configuration where the job never hangs, output parses, the rubric stays local, and the reviewer is independent of the author.</li>
+    </ol>
+    <p style="font-size:13px;color:var(--ink-2);margin:0 0 1.2rem">Only real Claude Code CI surface is used: <span class="tnum">-p</span>/<span class="tnum">--print</span>, <span class="tnum">--output-format</span> (text / json / stream-json), <span class="tnum">--append-system-prompt</span>, <span class="tnum">--allowedTools</span>, <span class="tnum">--dangerously-skip-permissions</span>, and the run's exit code.</p>
+    <button class="btn btn--primary" id="helpClose">Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function selectTab(tab){
+    tabs.forEach(function(t){
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if(tab.id === 't-arch') drawArch();
+  }
+  tabs.forEach(function(t,i){
+    t.addEventListener('click', function(){ selectTab(t); });
+    t.addEventListener('keydown', function(e){
+      var n=null;
+      if(e.key==='ArrowRight') n=tabs[(i+1)%tabs.length];
+      else if(e.key==='ArrowLeft') n=tabs[(i-1+tabs.length)%tabs.length];
+      if(n){ e.preventDefault(); n.focus(); selectTab(n); }
+    });
+  });
+
+  // ── Help ───────────────────────────────────────────────────────────────
+  var help = document.getElementById('help'), helpBtn = document.getElementById('helpBtn');
+  helpBtn.addEventListener('click', function(){ help.hidden = false; document.getElementById('helpClose').focus(); });
+  document.getElementById('helpClose').addEventListener('click', function(){ help.hidden = true; helpBtn.focus(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && !help.hidden){ help.hidden = true; helpBtn.focus(); } });
+
+  // ── Log helper ─────────────────────────────────────────────────────────
+  var logEl = document.getElementById('log'), step = 0;
+  function log(msg, cls){
+    var d = document.createElement('div');
+    d.className = 'log-line' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<span class="t">' + String(++step).padStart(2,'0') + '</span>  ' + msg;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ── Build the CLI line so config maps to a real invocation ─────────────
+  function renderCmd(invoke, output, persona, perms, gate){
+    var c = document.getElementById('cmd');
+    var html = '<span class="t">$</span> claude';
+    if(invoke === 'print'){ html += ' <span class="flag">-p</span>'; }
+    else { html += ' <span class="bad"># no -p: interactive, no TTY in CI</span>'; }
+    html += ' "Review tonight\'s merges for bugs and security issues"';
+    html += '\n    <span class="flag">--output-format</span> ' +
+            (output === 'text' ? '<span class="bad">text</span>' : output);
+    if(persona === 'append'){
+      html += ' \\\n    <span class="flag">--append-system-prompt</span> "$REVIEW_RUBRIC"';
+    } else {
+      html += '\n    <span class="bad"># persona injected by editing shared CLAUDE.md</span>';
+    }
+    if(perms === 'allowlist'){
+      html += ' \\\n    <span class="flag">--allowedTools</span> "Read Grep"';
+    } else {
+      html += ' \\\n    <span class="bad">--dangerously-skip-permissions</span>';
+    }
+    if(gate === 'exit'){
+      html += '\n  <span class="flag">code=$?</span>; if [ "$code" -ne 0 ]; then exit "$code"; fi   # findings fail the build';
+    } else {
+      html += '\n  <span class="bad"># exit code ignored — step always reports success</span>';
+    }
+    c.innerHTML = html;
+  }
+
+  // ── Model: config → deterministic consequences (THE teaching core) ─────
+  function run(){
+    logEl.innerHTML=''; step=0;
+    var invoke  = document.getElementById('cfgInvoke').value;
+    var output  = document.getElementById('cfgOutput').value;
+    var persona = document.getElementById('cfgPersona').value;
+    var session = document.getElementById('cfgSession').value;
+    var perms   = document.getElementById('cfgPerms').value;
+    var gate    = document.getElementById('cfgGate').value;
+    renderCmd(invoke, output, persona, perms, gate);
+
+    var hang = 4, parse = 99, indep = 95, thru = 240, blast = 6, gateEff = 100, fatal = false;
+
+    // (a) invocation -----------------------------------------------------
+    if(invoke === 'print'){
+      log('claude -p runs headless: processes the prompt, writes stdout, exits.', 'step');
+    } else {
+      hang = 100; thru = 0; fatal = true;
+      log('No -p flag. Claude Code opens an interactive prompt and blocks on stdin.', 'bad');
+      log('CI has no TTY — the job waits forever and is killed by the runner timeout.', 'bad');
+    }
+
+    // (b) output format --------------------------------------------------
+    if(output === 'json'){
+      log('--output-format json: one parseable object, posted as inline PR comments.', 'step');
+    } else if(output === 'stream'){
+      parse = 97;
+      log('--output-format stream-json: parseable NDJSON events; needs streaming reader.', 'step');
+    } else {
+      parse = 58; if(!fatal){ thru -= 40; }
+      log('--output-format text: prose findings. Regex/heuristic parsing breaks on phrasing.', 'bad');
+    }
+
+    // (c) reviewer persona ----------------------------------------------
+    if(persona === 'append'){
+      log('--append-system-prompt: rubric is scoped to this run only, leaves the repo clean.', 'step');
+    } else {
+      log('Editing the shared CLAUDE.md mutates the project file in version control.', 'bad');
+      log('Every contributor and IDE session now inherits the CI rubric — context pollution.', 'bad');
+      indep = Math.min(indep, 70);
+    }
+
+    // (d) review session -------------------------------------------------
+    if(session === 'fresh'){
+      log('Fresh session reads the diff as a new reader — no generation history to defend.', 'step');
+    } else {
+      indep = Math.min(indep, 38);
+      log('Reusing the authoring session: it retains its own reasoning and defends its choices.', 'bad');
+      log('Self-review bias — the bot under-flags issues it introduced.', 'bad');
+    }
+
+    // (e) tool permissions in CI -----------------------------------------
+    if(perms === 'allowlist'){
+      log('--allowedTools "Read Grep": the run can only read and search — no shell, no edits.', 'step');
+    } else {
+      blast = 96;
+      log('--dangerously-skip-permissions: every tool auto-approved with no prompt, no allowlist.', 'bad');
+      log('A prompt-injected diff could now run Bash or edit files unattended — full blast radius.', 'bad');
+    }
+
+    // (f) build gating ---------------------------------------------------
+    if(gate === 'exit'){
+      log('Build gated on exit code: a non-zero result from the review fails the job and blocks merge.', 'step');
+    } else {
+      gateEff = 0;
+      log('Exit code ignored — the step swallows $? and always reports success.', 'bad');
+      log('Findings are printed but never block the merge: a silently broken, decorative gate.', 'bad');
+    }
+
+    // metrics ------------------------------------------------------------
+    set('mHang',  hang + '%',  hang  > 20);
+    set('mParse', parse + '%', parse < 90);
+    set('mIndep', indep + '%', indep < 75);
+    set('mThru',  fatal ? '0' : thru, fatal);
+    set('mBlast', blast + '%', blast > 20);
+    set('mGate',  gateEff + '%', gateEff < 100);
+    meter('parseMeter', parse/100, parse < 90);
+
+    // verdict ------------------------------------------------------------
+    var v = document.getElementById('verdict');
+    if(fatal){
+      v.className = 'verdict is-fail';
+      v.textContent = 'Pipeline blocked: the job hangs on interactive input and is killed by the runner timeout. Add -p / --print.';
+    } else if(gateEff < 100){
+      v.className = 'verdict is-fail';
+      v.textContent = 'Decorative gate: the job ignores the exit code, so findings print but never fail the build. Gate the pipeline on $?.';
+    } else if(blast > 20){
+      v.className = 'verdict is-fail';
+      v.textContent = 'Over-privileged automation: --dangerously-skip-permissions hands the run every tool. Restrict it with an --allowedTools allowlist.';
+    } else if(parse < 90 || indep < 75){
+      v.className = 'verdict is-fail';
+      v.textContent = 'Job runs, but output is brittle or the review is not independent. Tighten output format and session isolation.';
+    } else {
+      v.className = 'verdict is-pass';
+      v.textContent = 'Clean run: headless, parseable, rubric scoped to the run, independent reviewer, least-privilege tools, exit code gates the merge.';
+    }
+    log('Run complete — exit code ' + (fatal ? '124 (timeout)' : '0') + '.', fatal ? 'bad' : 'step');
+
+    drawArch(); // keep the Architecture diagram in sync with this run's config
+  }
+
+  function set(id, val, bad){ var el=document.getElementById(id); el.textContent=val; el.classList.toggle('is-bad', !!bad); }
+  function meter(id, frac, bad){ var m=document.getElementById(id); m.classList.toggle('is-bad', !!bad);
+    var w = Math.max(0, Math.min(100, frac*100)) + '%';
+    if(reduce) m.firstElementChild.style.transition='none';
+    m.firstElementChild.style.width = w; }
+  function reset(){
+    logEl.innerHTML=''; step=0;
+    ['mHang','mParse','mIndep','mThru','mBlast','mGate'].forEach(function(i){ set(i,'—',false); });
+    meter('parseMeter',0,false);
+    var v=document.getElementById('verdict'); v.className='verdict'; v.textContent='Set the configuration and press Run.';
+    syncCmd();
+    drawArch(); // reflect the reset config in the Architecture diagram
+  }
+
+  function syncCmd(){
+    renderCmd(
+      document.getElementById('cfgInvoke').value,
+      document.getElementById('cfgOutput').value,
+      document.getElementById('cfgPersona').value,
+      document.getElementById('cfgPerms').value,
+      document.getElementById('cfgGate').value
+    );
+  }
+
+  document.getElementById('runBtn').addEventListener('click', run);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+  ['cfgInvoke','cfgOutput','cfgPersona','cfgPerms','cfgGate'].forEach(function(id){
+    document.getElementById(id).addEventListener('change', syncCmd);
+  });
+
+  // ── Canvas: CI pipeline, hairline ink on paper; red only for ACTIVE
+  //    anti-patterns. Reads the CURRENT config (same values run() reads) so
+  //    a flag is Alps red only while its anti-pattern is selected; ink when fixed.
+  function drawArch(){
+    var c = document.getElementById('arch'); if(!c) return;
+    var x = c.getContext('2d');
+    // Use the canvas's intrinsic backing size so it renders correctly even
+    // while the Architecture pane is hidden (offsetWidth would be 0 then).
+    var W = c.width, H = c.height;
+    x.clearRect(0,0,W,H);
+    var INK='#000', RED='#ed1c24', DIM='#6b675f';
+    x.lineWidth=1.5; x.font='13px "FDJR Text", system-ui, sans-serif';
+
+    // current configuration — identical sources to run()
+    var invoke  = document.getElementById('cfgInvoke').value;
+    var output  = document.getElementById('cfgOutput').value;
+    var persona = document.getElementById('cfgPersona').value;
+    var session = document.getElementById('cfgSession').value;
+    var perms   = document.getElementById('cfgPerms').value;
+    var gate    = document.getElementById('cfgGate').value;
+
+    var hangBad   = (invoke  === 'interactive'); // no -p in CI → hang/timeout
+    var parseBad  = (output  === 'text');        // text output → brittle parse
+    var personaBad= (persona === 'mutate');      // mutating shared CLAUDE.md
+    var sessionBad= (session === 'same');        // self-review (reuse author session)
+    var permsBad  = (perms   === 'skip');        // skip permissions → full blast radius
+    var gateBad   = (gate    === 'ignore');      // exit code ignored → decorative gate
+
+    function box(bx,by,bw,bh,title,sub,stroke){
+      x.strokeStyle=stroke||INK; x.strokeRect(bx,by,bw,bh);
+      x.fillStyle=(stroke===RED)?RED:INK; x.font='600 13px "FDJR Text", system-ui, sans-serif';
+      x.fillText(title,bx+12,by+24);
+      if(sub){ x.fillStyle=DIM; x.font='11px "FDJR Text", system-ui, sans-serif'; x.fillText(sub,bx+12,by+42); }
+    }
+    function arrow(x1,y1,x2,y2){
+      x.strokeStyle=INK; x.beginPath(); x.moveTo(x1,y1); x.lineTo(x2,y2); x.stroke();
+      var a=Math.atan2(y2-y1,x2-x1);
+      x.beginPath(); x.moveTo(x2,y2);
+      x.lineTo(x2-8*Math.cos(a-0.4),y2-8*Math.sin(a-0.4));
+      x.lineTo(x2-8*Math.cos(a+0.4),y2-8*Math.sin(a+0.4));
+      x.closePath(); x.fillStyle=INK; x.fill();
+    }
+    function flag(text,fx,fy){
+      x.fillStyle=RED; x.font='600 12px "FDJR Text", system-ui, sans-serif';
+      x.fillText('▲ '+text, fx, fy);
+    }
+
+    var y=70, h=58, w=160;
+    box(20,  y, w, h, 'checkout', 'fetch merges', INK);
+    box(220, y, w, h, hangBad ? 'claude (interactive)' : 'claude -p',
+        hangBad ? 'no -p / no TTY' : 'headless review', hangBad ? RED : INK);
+    box(420, y, w, h, 'parse',
+        '--output-format ' + (parseBad ? 'text' : (output === 'stream' ? 'stream-json' : 'json')),
+        parseBad ? RED : INK);
+    box(620, y, w, h, 'merge gate',
+        gateBad ? 'exit code ignored' : 'on exit code',
+        gateBad ? RED : INK);
+    arrow(180,y+h/2,220,y+h/2);
+    arrow(380,y+h/2,420,y+h/2);
+    arrow(580,y+h/2,620,y+h/2);
+
+    // permissions node feeding the claude stage — red when unrestricted.
+    // sits to the LEFT of the persona/CLAUDE.md slot so the two never overlap.
+    box(20, 230, w, h, permsBad ? 'tool permissions' : '--allowedTools',
+        permsBad ? 'skip-permissions: all tools' : 'Read · Grep only',
+        permsBad ? RED : INK);
+    x.strokeStyle = permsBad ? RED : INK;
+    x.beginPath(); x.moveTo(180,230+h/2); x.lineTo(220,y+h+4); x.stroke();
+    if(permsBad){ flag('--dangerously-skip-permissions: every tool auto-approved', 20, 230+h+22); }
+
+    // anti-pattern flag 1: interactive hang on the claude stage
+    if(hangBad){
+      x.strokeStyle=RED; x.setLineDash([5,4]);
+      x.strokeRect(216,y-4,w+8,h+8); x.setLineDash([]);
+      flag('without -p: interactive prompt, no TTY → hang / timeout', 200, y+h+30);
+    }
+
+    // anti-pattern flag 2: brittle text parse on the parse stage
+    if(parseBad){
+      x.strokeStyle=RED; x.setLineDash([5,4]);
+      x.strokeRect(416,y-4,w+8,h+8); x.setLineDash([]);
+      flag('text output: regex/heuristic parse breaks on phrasing', 380, y+h+50);
+    }
+
+    // anti-pattern flag 3: shared CLAUDE.md mutation feeding the claude stage
+    if(personaBad){
+      box(220, 230, w, h, 'shared CLAUDE.md', 'mutated for persona', RED);
+      x.strokeStyle=RED; x.beginPath(); x.moveTo(300,230); x.lineTo(300,y+h+4); x.stroke();
+      flag('pollutes every contributor — prefer --append-system-prompt', 320, 300);
+    }
+
+    // anti-pattern flag 4: self-review (authoring session reused) on the claude stage
+    if(sessionBad){
+      flag('self-review: authoring session reused → under-flags own issues', 200, y-18);
+    }
+
+    // anti-pattern flag 5: decorative gate — exit code ignored at the merge stage
+    if(gateBad){
+      x.strokeStyle=RED; x.setLineDash([5,4]);
+      x.strokeRect(616,y-4,w+8,h+8); x.setLineDash([]);
+      flag('exit code ignored: findings never fail the build', 560, y-18);
+    }
+  }
+
+  // ── Knowledge check ────────────────────────────────────────────────────
+  var KC = [
+    {
+      q: 'A CI script runs claude "Review this PR for security issues" and the job hangs indefinitely. What is the correct fix?',
+      options: [
+        'Add the -p (or --print) flag so it runs non-interactively.',
+        'Set CLAUDE_HEADLESS=true in the job environment before invoking the command.',
+        'Add the --batch flag to disable the interactive prompt.',
+        'Redirect stdin from /dev/null so there is nothing to wait on.'
+      ],
+      correct: 0,
+      explain: '-p / --print is the documented way to run Claude Code non-interactively. CLAUDE_HEADLESS and --batch are not real flags, and stdin redirection is a Unix workaround that does not address the command protocol.'
+    },
+    {
+      q: 'Your gate script parses Claude’s findings programmatically to post inline PR comments. How should you get machine-parseable output?',
+      options: [
+        'Use --output-format json (or stream-json) so the output is structured.',
+        'Ask Claude in the prompt to always answer in JSON — it is reliable enough.',
+        'Pipe the default text output through a jq filter to extract the fields.',
+        'Use --output-format yaml for a more forgiving structured format.'
+      ],
+      correct: 0,
+      explain: '--output-format json/stream-json produces structured output the pipeline can parse deterministically. Prompting for JSON is not enforced, jq requires already-valid JSON, and yaml is not a Claude Code output format.'
+    },
+    {
+      q: 'The bot needs a strict review rubric, but you must not change behavior for engineers using the repo interactively. How do you inject the persona?',
+      options: [
+        'Pass --append-system-prompt with the rubric, scoped to the CI run only.',
+        'Edit the shared CLAUDE.md in the repo so the review rubric applies to every session.',
+        'Commit the rubric to a global ~/.claude config on the CI runner image.',
+        'Set a CLAUDE_SYSTEM_PROMPT environment variable for the job.'
+      ],
+      correct: 0,
+      explain: '--append-system-prompt scopes the rubric to that single invocation. Editing the shared CLAUDE.md pollutes every contributor and IDE session, and CLAUDE_SYSTEM_PROMPT is not a real Claude Code variable.'
+    },
+    {
+      q: 'Why is the same Claude session that generated the code less effective at reviewing its own changes?',
+      options: [
+        'It defends its own decisions and so questions them less than a fresh instance.',
+        'Generation always exhausts the context window, leaving no room left for a careful review pass.',
+        'Review requires a fundamentally different model than generation, which one session cannot switch between.',
+        'Claude Code technically cannot generate and review code within one session.'
+      ],
+      correct: 0,
+      explain: 'Self-review bias: the authoring session carries the reasoning behind each decision and is less likely to surface those choices as issues. A fresh, independent session reads the diff as a new reader and catches assumptions the author took for granted.'
+    },
+    {
+      q: 'Your nightly review job only needs to read and search the diff — it should never run shell commands or edit files. In non-interactive CI, how do you scope its permissions?',
+      options: [
+        'Pass --allowedTools "Read Grep" to restrict the run to that explicit allowlist.',
+        'Run it with --dangerously-skip-permissions, since CI is a trusted environment and prompts would block the job anyway.',
+        'Set CLAUDE_ALLOW_TOOLS=Read,Grep in the job environment so only those tools load.',
+        'Add the --readonly flag so the run cannot execute any write or shell tools.'
+      ],
+      correct: 0,
+      explain: '--allowedTools takes an explicit allowlist, so a prompt-injected diff cannot reach Bash or Edit. --dangerously-skip-permissions removes all restrictions, CLAUDE_ALLOW_TOOLS is not a real variable, and --readonly is not a real flag (the closest real option is --permission-mode plan).'
+    },
+    {
+      q: 'The review job prints findings but the build never fails, even on real bugs. The CI step ends with: claude -p "..." --output-format json; echo done. What is wrong?',
+      options: [
+        'The exit code is discarded, so the step always succeeds — gate the build on $?.',
+        'JSON output suppresses the exit code, so you must switch the run to --output-format text to restore proper build failure on findings.',
+        'echo done resets the previous exit status, so removing that one line alone is enough to make the gate work.',
+        'Claude Code cannot signal failures through exit codes, so the gate has to parse the JSON result field itself.'
+      ],
+      correct: 0,
+      explain: "claude -p exits non-zero on failure, but the script never checks $? before the next command, so the step's status reflects echo (always 0). Capture and act on the exit code (e.g. code=$?; [ \"$code\" -ne 0 ] && exit \"$code\") to fail the build on findings."
+    }
+  ];
+  function renderKC(){
+    var host = document.getElementById('kcHost'); host.innerHTML='';
+    KC.forEach(function(item, qi){
+      var block = document.createElement('div'); block.className='kc-block';
+      var q = document.createElement('p'); q.className='kc-q'; q.textContent=(qi+1)+'. '+item.q; block.appendChild(q);
+      var group = document.createElement('div'); group.setAttribute('role','group'); group.setAttribute('aria-label','Question '+(qi+1));
+      item.options.forEach(function(opt,i){
+        var b=document.createElement('button'); b.className='kc-opt'; b.type='button'; b.textContent=opt;
+        b.addEventListener('click', function(){
+          Array.prototype.forEach.call(group.querySelectorAll('.kc-opt'), function(o,j){
+            o.disabled=true; o.dataset.state = j===item.correct ? 'correct' : (j===i ? 'wrong' : 'muted');
+          });
+          if(!block.querySelector('.kc-exp')){
+            var e=document.createElement('div'); e.className='kc-exp';
+            e.textContent=(i===item.correct ? 'Correct. ' : 'Not quite. ')+item.explain;
+            block.appendChild(e);
+          }
+        });
+        group.appendChild(b);
+      });
+      block.appendChild(group);
+      host.appendChild(block);
+    });
+  }
+
+  // init
+  reset(); renderKC();
+})();
+</script>
+</body>
+</html>

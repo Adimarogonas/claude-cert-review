@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Long-Context Conversation Manager — CarbonSilicon</title>
+<link rel="stylesheet" href="/simulations/csl-sim.css">
+<style>
+  /* sim-specific CSS only — everything brand-level comes from csl-sim.css */
+  .arch-wrap{ position:relative }
+  .run-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px }
+
+  /* segmented radio groups stacked as labelled fields */
+  .seg-field{ margin-bottom:16px }
+  .seg-field > .seg-label{ font-size:12px; font-weight:600; color:var(--carbon); display:block; margin-bottom:6px }
+  .seg-field .hint{ display:block; font-size:11.5px; color:var(--ink-2); line-height:1.45; margin-top:6px }
+  .seg.seg-wrap{ display:flex; flex-wrap:wrap; width:100% }
+  .seg.seg-wrap button{ flex:1 1 auto }
+
+  /* the meter reading line */
+  .meter-read{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:6px }
+  .meter-read .lab{ font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-2) }
+  .meter-read .val{ font-family:var(--font-display); font-weight:500; font-size:1.05rem; font-variant-numeric:tabular-nums }
+  .meter-read .val.is-bad{ color:var(--alps) }
+  .meter-note{ font-size:11px; color:var(--ink-2); margin-top:5px }
+  .meter-note.is-bad{ color:var(--alps); font-weight:600 }
+
+  /* fact-survival ledger */
+  .facts{ margin-top:14px; border:1px solid var(--hair); border-radius:var(--r-md); overflow:hidden }
+  .facts-head{ font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-2);
+    background:var(--sunken); padding:.5rem .7rem; border-bottom:1px solid var(--hair) }
+  .fact-row{ display:flex; align-items:center; gap:10px; padding:.5rem .7rem; border-bottom:1px solid var(--hair); font-size:12.5px }
+  .fact-row:last-child{ border-bottom:none }
+  .fact-row .fact-txt{ flex:1; font-family:var(--mono); font-size:11.5px; line-height:1.4 }
+  .fact-row .fact-state{ flex:none; font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+    padding:.12rem .45rem; border-radius:999px; border:1px solid var(--hair-2); color:var(--ink-2) }
+  .fact-row.kept .fact-state{ border-color:var(--monolith); color:var(--monolith) }
+  .fact-row.lost{ background:rgba(237,28,36,.05) }
+  .fact-row.lost .fact-txt{ color:var(--alps); text-decoration:line-through }
+  .fact-row.lost .fact-state{ border-color:var(--alps); color:var(--alps) }
+
+  .kc-progress{ font-size:11px; color:var(--ink-2); margin:0 0 14px; font-variant-numeric:tabular-nums }
+</style>
+</head>
+<body>
+<main class="sim">
+
+  <div class="sim-head-row">
+    <div>
+      <div class="sim-eyebrow">Domain 5 · Interactive Simulation</div>
+      <h1 class="sim-title">Long-Context Conversation Manager</h1>
+    </div>
+    <button class="btn btn--ghost help-btn" id="helpBtn" aria-haspopup="dialog">? Help</button>
+  </div>
+  <p class="sim-deck">A multi-turn legal-document analysis session runs long and the context window fills. Choose how you manage context, position findings, and offload exploration — then run the session and watch which early facts survive.</p>
+
+  <div class="tabs" role="tablist" aria-label="Simulator sections">
+    <button class="tab" role="tab" id="t-sim"  aria-controls="p-sim"  aria-selected="true">Simulate</button>
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="false">Architecture</button>
+    <button class="tab" role="tab" id="t-kc"   aria-controls="p-kc"   aria-selected="false">Knowledge Check</button>
+  </div>
+
+  <!-- ── Simulate ──────────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-sim" role="tabpanel" aria-labelledby="t-sim">
+    <div class="cols cols-2">
+      <div class="panel">
+        <p class="panel-label">Configuration</p>
+
+        <div class="seg-field">
+          <span class="seg-label" id="lblStrat">Context strategy</span>
+          <div class="seg seg-wrap" role="radiogroup" aria-labelledby="lblStrat" id="segStrat">
+            <button role="radio" aria-checked="true"  data-v="truncate">Naive truncation</button>
+            <button role="radio" aria-checked="false" data-v="summary">Rolling summary</button>
+            <button role="radio" aria-checked="false" data-v="persist">Persistent fact-block</button>
+          </div>
+          <span class="hint">How history is condensed as the window fills. A persistent structured fact-block keeps amounts/dates anchored in every request, outside summarized history.</span>
+        </div>
+
+        <label class="toggle" style="margin-bottom:6px">
+          <input type="checkbox" id="cfgLead">
+          <span class="track"></span>
+          <span>Lead summaries + section headers</span>
+        </label>
+        <p class="hint" style="margin:0 0 16px">Place key findings first and label sections to fight the "lost-in-the-middle" position effect.</p>
+
+        <label class="toggle" style="margin-bottom:6px">
+          <input type="checkbox" id="cfgOffload">
+          <span class="track"></span>
+          <span>Offload exploration to subagents + scratchpad</span>
+        </label>
+        <p class="hint" style="margin:0 0 16px">Isolate verbose discovery in subagents and persist findings to scratchpad files instead of cramming everything into the main context.</p>
+
+        <label class="toggle" style="margin-bottom:6px">
+          <input type="checkbox" id="cfgCache">
+          <span class="track"></span>
+          <span>Prompt-cache the stable prefix + trim tool outputs</span>
+        </label>
+        <p class="hint" style="margin:0 0 16px">Cache the unchanging 180-page document prefix so it isn't re-sent and re-billed each turn, and trim verbose tool dumps (45-field lookups) to relevant fields before appending. Off means re-sending the full uncached prefix and pasting raw tool output — faster context growth and higher cost.</p>
+
+        <div class="seg-field">
+          <span class="seg-label" id="lblReview">Human-review routing</span>
+          <div class="seg seg-wrap" role="radiogroup" aria-labelledby="lblReview" id="segReview">
+            <button role="radio" aria-checked="true"  data-v="trust">Auto-ship all extractions</button>
+            <button role="radio" aria-checked="false" data-v="selfreport">Route by self-reported confidence</button>
+            <button role="radio" aria-checked="false" data-v="calibrated">Route low-confidence to human (calibrated)</button>
+          </div>
+          <span class="hint">How extracted facts reach the answer. A calibrated threshold (tuned on a labeled validation set) routes genuinely uncertain extractions to a human reviewer. Self-reported confidence is uncalibrated — the model can be confidently wrong. Auto-shipping trusts every extraction unreviewed.</span>
+        </div>
+
+        <div class="field">
+          <label for="cfgTurns">Session length (turns)</label>
+          <select id="cfgTurns">
+            <option value="12">12 turns — short review</option>
+            <option value="30">30 turns — full analysis</option>
+            <option value="48" selected>48 turns — extended session</option>
+          </select>
+          <span class="hint">Longer sessions accumulate more tool output and history, pushing the window toward overflow.</span>
+        </div>
+
+        <div class="run-row">
+          <button class="btn btn--primary" id="runBtn">▶ Run session</button>
+          <button class="btn btn--ghost" id="resetBtn">↺ Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-label">Outcome</p>
+        <div class="metrics" id="metrics">
+          <div class="metric"><div class="v tnum" id="mRetain">—</div><div class="k">Fact retention</div></div>
+          <div class="metric"><div class="v tnum" id="mLost">—</div><div class="k">Lost facts</div></div>
+          <div class="metric"><div class="v tnum" id="mCost">—</div><div class="k">Token cost</div></div>
+          <div class="metric"><div class="v tnum" id="mErrors">—</div><div class="k">Errors shipped</div></div>
+          <div class="metric"><div class="v tnum" id="mReview">—</div><div class="k">Routed to review</div></div>
+        </div>
+
+        <div style="margin-top:14px">
+          <div class="meter-read">
+            <span class="lab">Context-window usage</span>
+            <span class="val tnum" id="ctxVal">—</span>
+          </div>
+          <div class="meter" id="ctxMeter"><i></i></div>
+          <div class="meter-note" id="ctxNote">Set a configuration and run the session.</div>
+        </div>
+
+        <div class="facts" id="facts" aria-live="polite">
+          <div class="facts-head">Early facts — survival at end of session</div>
+          <div class="fact-row" data-fact="amount"><span class="fact-txt">Refund amount: $47.32</span><span class="fact-state">—</span></div>
+          <div class="fact-row" data-fact="date"><span class="fact-txt">Dispute date: March 15</span><span class="fact-state">—</span></div>
+          <div class="fact-row" data-fact="order"><span class="fact-txt">Order #: 88-204417 (turn 3, middle)</span><span class="fact-state">—</span></div>
+          <div class="fact-row" data-fact="clause"><span class="fact-txt">Indemnity clause §12 (mid-document)</span><span class="fact-state">—</span></div>
+        </div>
+
+        <div class="log" id="log" style="margin-top:14px" aria-live="polite" role="log" aria-label="Session run log"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+    <div class="panel arch-wrap">
+      <p class="panel-label">Context-window fill & summarization</p>
+      <canvas id="arch" width="820" height="380" aria-label="Diagram: a bar of conversation turns filling the context window, with a summary fold compressing early turns. Facts dropped by truncation are marked in Alps red; facts anchored in a persistent fact-block sit outside the summarized history."></canvas>
+      <p class="meter-note" style="margin-top:12px">Each cell is one turn. The summary fold compresses early history; a persistent fact-block sits outside it so anchored facts survive. Cells flagged in red are facts dropped when the window overflows under naive truncation.</p>
+    </div>
+  </section>
+
+  <!-- ── Knowledge Check ───────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-kc" role="tabpanel" aria-labelledby="t-kc" hidden>
+    <p class="kc-progress" id="kcProgress" aria-live="polite"></p>
+    <div class="panel" id="kcHost"></div>
+  </section>
+
+</main>
+
+<!-- ── Help overlay ────────────────────────────────────────────────────── -->
+<div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <h2 id="helpTitle">How this simulation works</h2>
+    <ol>
+      <li>Pick a <strong>context strategy</strong>, toggle <strong>lead summaries</strong> and <strong>subagent offload</strong>, and set the <strong>session length</strong>.</li>
+      <li>Press <strong>Run session</strong>. Context usage climbs turn by turn; the meter turns red over 85%.</li>
+      <li>Watch the <strong>early-facts ledger</strong>: see which facts survive and which get dropped (red).</li>
+      <li>Aim for high fact retention, zero lost facts, and a context meter under budget.</li>
+    </ol>
+    <button class="btn btn--primary" id="helpClose">Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function selectTab(tab){
+    tabs.forEach(function(t){
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    // redraw the Architecture diagram on switch so it reflects the current config
+    if(tab.getAttribute('aria-controls') === 'p-arch') drawArch();
+    tab.focus();
+  }
+  tabs.forEach(function(t, i){
+    t.addEventListener('click', function(){ selectTab(t); });
+    t.addEventListener('keydown', function(e){
+      if(e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
+        e.preventDefault();
+        var dir = e.key === 'ArrowRight' ? 1 : -1;
+        selectTab(tabs[(i + dir + tabs.length) % tabs.length]);
+      }
+    });
+  });
+
+  // ── Help ───────────────────────────────────────────────────────────────
+  var help = document.getElementById('help'), helpBtn = document.getElementById('helpBtn');
+  helpBtn.addEventListener('click', function(){ help.hidden = false; document.getElementById('helpClose').focus(); });
+  document.getElementById('helpClose').addEventListener('click', function(){ help.hidden = true; helpBtn.focus(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && !help.hidden){ help.hidden = true; helpBtn.focus(); } });
+
+  // ── Segmented radiogroup for context strategy ──────────────────────────
+  var segStrat = document.getElementById('segStrat');
+  var segBtns = Array.prototype.slice.call(segStrat.querySelectorAll('button'));
+  function strat(){ var b = segStrat.querySelector('[aria-checked="true"]'); return b ? b.getAttribute('data-v') : 'truncate'; }
+  function setStrat(btn){
+    segBtns.forEach(function(b){ var on = b === btn; b.setAttribute('aria-checked', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1; });
+  }
+  segBtns.forEach(function(b, i){
+    b.addEventListener('click', function(){ setStrat(b); });
+    b.addEventListener('keydown', function(e){
+      if(e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowUp'){
+        e.preventDefault();
+        var dir = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : -1;
+        var nb = segBtns[(i + dir + segBtns.length) % segBtns.length];
+        setStrat(nb); nb.focus();
+      }
+    });
+  });
+
+  // ── Segmented radiogroup for human-review routing ──────────────────────
+  var segReview = document.getElementById('segReview');
+  var revBtns = Array.prototype.slice.call(segReview.querySelectorAll('button'));
+  function review(){ var b = segReview.querySelector('[aria-checked="true"]'); return b ? b.getAttribute('data-v') : 'trust'; }
+  function setReview(btn){
+    revBtns.forEach(function(b){ var on = b === btn; b.setAttribute('aria-checked', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1; });
+  }
+  revBtns.forEach(function(b, i){
+    b.addEventListener('click', function(){ setReview(b); });
+    b.addEventListener('keydown', function(e){
+      if(e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowUp'){
+        e.preventDefault();
+        var dir = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : -1;
+        var nb = revBtns[(i + dir + revBtns.length) % revBtns.length];
+        setReview(nb); nb.focus();
+      }
+    });
+  });
+
+  // ── Log helper ─────────────────────────────────────────────────────────
+  var logEl = document.getElementById('log'), step = 0;
+  function log(msg, cls){
+    var d = document.createElement('div');
+    d.className = 'log-line' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<span class="t">' + String(++step).padStart(2,'0') + '</span>  ' + msg;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ── Deterministic config → metrics model (the teaching core) ───────────
+  // Facts: amount/date are transactional (saved by a persistent block);
+  // order/clause sit in the MIDDLE of the input (saved by lead+headers).
+  function run(){
+    logEl.innerHTML=''; step=0;
+    var s = strat();
+    var lead = document.getElementById('cfgLead').checked;
+    var offload = document.getElementById('cfgOffload').checked;
+    var cache = document.getElementById('cfgCache').checked;
+    var rev = review();
+    var turns = parseInt(document.getElementById('cfgTurns').value, 10);
+
+    // ---- context-window usage ----
+    // Base growth per turn + verbose tool output unless offloaded.
+    var perTurn = offload ? 0.011 : 0.020;
+    if(!cache) perTurn += 0.006;               // raw tool dumps accumulate faster
+    var ctx = 0.18 + turns * perTurn;
+    if(s === 'truncate') ctx += 0.10;          // unbounded history, then hard cut
+    else if(s === 'summary') ctx += 0.02;      // summaries cost a little
+    // persistent block alone is cheap; fact-block is small
+    if(s === 'persist' && !offload) ctx += 0.04;
+    ctx = Math.max(0.05, Math.min(1.20, ctx));
+    var overflow = ctx > 1.0;
+    var overBudget = ctx > 0.85;
+
+    log('Session start — analyzing a 180-page contract over ' + turns + ' turns.', 'step');
+    if(offload) log('Verbose discovery delegated to subagents; findings written to scratchpad files.', 'step');
+    else log('All exploration crammed into the main context — verbose tool output accumulates.', 'bad');
+    if(cache) log('Stable 180-page prefix prompt-cached (re-used, not re-billed); 45-field tool dumps trimmed to relevant fields before appending.', 'step');
+    else log('Full uncached prefix re-sent every turn and raw tool dumps appended whole — context grows fast and tokens are re-billed each request.', 'bad');
+
+    // ---- fact survival ----
+    // transactional facts: amount, date  |  middle-position facts: order, clause
+    var fact = { amount:true, date:true, order:true, clause:true };
+
+    // Strategy effect on TRANSACTIONAL facts (specific values)
+    if(s === 'truncate'){
+      // hard cut drops oldest turns -> the early amount/date fall off the window
+      fact.amount = false; fact.date = false;
+      log('Naive truncation: oldest turns hard-cut to fit. Early amount ($47.32) and date (March 15) fall off the window.', 'bad');
+    } else if(s === 'summary'){
+      // progressive summarization condenses specifics into vague approximations
+      fact.amount = false; fact.date = false;
+      log('Rolling summary condenses "$47.32 on March 15" into "a recent dispute" — specific values lost.', 'bad');
+    } else {
+      log('Persistent fact-block re-injects amount ($47.32) and date (March 15) in every request — anchored.', 'step');
+    }
+
+    // Position effect on MIDDLE facts (order # at turn 3, mid-document clause)
+    if(!lead){
+      fact.order = false; fact.clause = false;
+      log('No lead summary or section headers: the mid-input order # and §12 clause hit the "lost-in-the-middle" dead zone.', 'bad');
+    } else {
+      log('Lead summary + section headers surface the mid-input order # and §12 clause reliably.', 'step');
+    }
+
+    // Overflow penalty: if the window overflows, even anchored content gets squeezed.
+    if(overflow){
+      // overflow drops whatever is still middle-ish; clause is most vulnerable
+      if(fact.clause){ fact.clause = false; log('Context window OVERFLOWED (>100%) — even surfaced mid-document content is now squeezed out.', 'bad'); }
+      else log('Context window OVERFLOWED (>100%) — requests will start failing or silently truncating.', 'bad');
+    } else if(overBudget){
+      log('Context over 85% of budget — entering the degradation zone; specifics start getting approximated.', 'bad');
+    }
+
+    // ---- tally ----
+    var keys = ['amount','date','order','clause'];
+    var kept = 0; keys.forEach(function(k){ if(fact[k]) kept++; });
+    var lost = keys.length - kept;
+    var retention = Math.round(kept / keys.length * 100);
+
+    // ---- token cost (relative units) ----
+    // truncation + cram = most reprocessing; offload + persist = leanest
+    var cost = turns * (offload ? 1.4 : 2.3);
+    if(s === 'truncate') cost *= 1.0;
+    else if(s === 'summary') cost *= 0.9;       // shorter prompts after summary
+    else cost *= 0.96;                           // small fact-block overhead
+    // caching the stable prefix + trimming tool output cuts re-billed tokens sharply
+    cost *= cache ? 0.62 : 1.0;
+    cost = Math.round(cost);
+
+    // ---- human-review routing: errors shipped vs routed to review ----
+    // Some extractions are genuinely uncertain (ambiguous/contradictory source).
+    // A calibrated threshold catches those; self-reported confidence misses the
+    // confidently-wrong ones; auto-shipping reviews nothing.
+    var uncertain = lost + 1;                     // lost facts + at least one ambiguous clause
+    var errors, routed;
+    if(rev === 'calibrated'){
+      errors = 0; routed = uncertain;
+      log('Calibrated threshold (tuned on a labeled validation set) routes ' + routed + ' low-confidence/ambiguous extraction' + (routed>1?'s':'') + ' to human review — none shipped unchecked.', 'step');
+    } else if(rev === 'selfreport'){
+      // model is confidently wrong on roughly half the uncertain cases
+      routed = Math.floor(uncertain / 2); errors = uncertain - routed;
+      log('Routing by self-reported confidence: the model is confidently wrong on ' + errors + ' extraction' + (errors>1?'s':'') + ' it rated high-confidence — those ship unreviewed.', 'bad');
+    } else {
+      errors = uncertain; routed = 0;
+      log('Auto-shipping all extractions: ' + errors + ' uncertain extraction' + (errors>1?'s':'') + ' shipped with no human review.', 'bad');
+    }
+
+    // ---- paint metrics ----
+    set('mRetain', retention + '%', retention < 100);
+    set('mLost', lost, lost > 0);
+    set('mCost', cost + 'k', !cache);
+    set('mErrors', errors, errors > 0);
+    set('mReview', routed);
+
+    var ctxPct = Math.round(ctx * 100);
+    setVal('ctxVal', ctxPct + '%', overBudget);
+    meter('ctxMeter', ctx, overBudget);
+    var note = document.getElementById('ctxNote');
+    note.classList.toggle('is-bad', overBudget);
+    note.textContent = overflow ? 'Over 100% — window overflow; facts and tool results are being dropped.'
+                     : overBudget ? 'Over 85% of budget — degradation zone.'
+                     : 'Within budget — healthy headroom.';
+
+    // ---- paint fact ledger ----
+    keys.forEach(function(k){
+      var row = document.querySelector('.fact-row[data-fact="' + k + '"]');
+      var on = fact[k];
+      row.classList.toggle('kept', on);
+      row.classList.toggle('lost', !on);
+      row.querySelector('.fact-state').textContent = on ? 'kept' : 'lost';
+    });
+
+    log(lost === 0
+        ? 'Run complete — all early facts retained (' + retention + '%).'
+        : 'Run complete — ' + lost + ' fact' + (lost>1?'s':'') + ' lost, retention ' + retention + '%.',
+        lost === 0 ? 'step' : 'bad');
+
+    // keep the Architecture diagram in sync with this run's configuration
+    drawArch();
+  }
+
+  function set(id, val, bad){ var el=document.getElementById(id); el.textContent=val; el.classList.toggle('is-bad', !!bad); }
+  function setVal(id, val, bad){ var el=document.getElementById(id); el.textContent=val; el.classList.toggle('is-bad', !!bad); }
+  function meter(id, frac, bad){
+    var m=document.getElementById(id); m.classList.toggle('is-bad', !!bad);
+    var fill = m.firstElementChild;
+    if(reduceMotion) fill.style.transition = 'none';
+    fill.style.width = Math.min(100, frac*100) + '%';
+  }
+
+  function reset(){
+    logEl.innerHTML='';
+    set('mRetain','—',false); set('mLost','—',false); set('mCost','—',false);
+    set('mErrors','—',false); set('mReview','—',false);
+    setVal('ctxVal','—',false); meter('ctxMeter',0,false);
+    var note = document.getElementById('ctxNote'); note.classList.remove('is-bad'); note.textContent='Set a configuration and run the session.';
+    Array.prototype.forEach.call(document.querySelectorAll('.fact-row'), function(row){
+      row.classList.remove('kept','lost'); row.querySelector('.fact-state').textContent='—';
+    });
+    // redraw the Architecture diagram for the current (reset-to) configuration
+    drawArch();
+  }
+
+  document.getElementById('runBtn').addEventListener('click', run);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  // ── Canvas diagram — hairline ink on paper ─────────────────────────────
+  // Reads the CURRENT configuration (same inputs run() uses) and renders the
+  // context window to match: cell count = session length; dropped-fact cells
+  // and the over-budget / overflow marker appear in Alps red ONLY when the
+  // current config actually drops facts / overflows the budget. When the config
+  // keeps facts and stays under budget it draws in ink with no red.
+  function drawArch(){
+    var c = document.getElementById('arch'), x = c.getContext('2d');
+    // Use the canvas's intrinsic pixel dimensions so it renders correctly even
+    // while the Architecture pane is hidden (offsetWidth/Height would be 0).
+    var W = c.width, H = c.height;
+    var paper = '#fbfaf6', ink = '#000', grey = '#6b675f', mono = '#1a1a1a', alps = '#ed1c24';
+    x.clearRect(0,0,W,H);
+    x.fillStyle = paper; x.fillRect(0,0,W,H);
+    x.textBaseline = 'alphabetic';
+
+    function label(t, lx, ly, color, size, weight){
+      x.fillStyle = color || ink; x.font = (weight||'400') + ' ' + (size||13) + 'px "FDJR Text", system-ui, sans-serif';
+      x.fillText(t, lx, ly);
+    }
+
+    // ── Read CURRENT config (mirrors run()) ──────────────────────────────
+    var s = strat();
+    var lead = document.getElementById('cfgLead').checked;
+    var offload = document.getElementById('cfgOffload').checked;
+    var cache = document.getElementById('cfgCache').checked;
+    var rev = review();
+    var turns = parseInt(document.getElementById('cfgTurns').value, 10);
+
+    // ── Derive ctx fill / budget state (identical math to run()) ─────────
+    var perTurn = offload ? 0.011 : 0.020;
+    if(!cache) perTurn += 0.006;
+    var ctx = 0.18 + turns * perTurn;
+    if(s === 'truncate') ctx += 0.10;
+    else if(s === 'summary') ctx += 0.02;
+    if(s === 'persist' && !offload) ctx += 0.04;
+    ctx = Math.max(0.05, Math.min(1.20, ctx));
+    var overflow = ctx > 1.0;
+    var overBudget = ctx > 0.85;
+
+    // ── Derive per-fact survival (identical logic to run()) ──────────────
+    var fact = { amount:true, date:true, order:true, clause:true };
+    if(s === 'truncate' || s === 'summary'){ fact.amount = false; fact.date = false; }
+    if(!lead){ fact.order = false; fact.clause = false; }
+    if(overflow && fact.clause){ fact.clause = false; }
+    var anyDropped = !fact.amount || !fact.date || !fact.order || !fact.clause;
+
+    // title row — reflects the live session length
+    label('CONTEXT WINDOW — one cell per turn  (' + turns + ' turns)', 40, 40, grey, 11, '600');
+
+    // ── the turn bar: one cell per turn, sized to fit the session length ──
+    var x0 = 40, y0 = 60, ch = 56, gap = 4;
+    var n = turns;
+    // size cells to fill the available width for the current turn count
+    var avail = W - x0 - 40;
+    var cw = Math.max(8, Math.min(44, Math.floor((avail - (n-1)*gap) / n)));
+    var barW = n*(cw+gap) - gap;
+    var budgetX = x0 + Math.round(n*0.85)*(cw+gap); // 85% position marker
+
+    // Which cells visually carry a dropped fact, ONLY when the config drops them:
+    //  - truncate/summary lose the EARLY transactional facts (amount/date)  → t1
+    //  - no lead summary loses MID-position facts (order/clause)            → middle
+    //  - overflow squeezes out a late mid-document clause                   → ~85% line
+    var earlyDrop  = (!fact.amount || !fact.date);                 // early turn cell
+    var midDrop     = (!fact.order || !fact.clause) && !overflow;  // mid turn cell
+    var lateDrop    = overflow;                                    // late/over-budget cell
+    var earlyIdx = 0;
+    var midIdx   = Math.min(n-1, Math.round(n*0.45));
+    var lateIdx  = Math.min(n-1, Math.round(n*0.85));
+
+    for(var i=0;i<n;i++){
+      var cx = x0 + i*(cw+gap);
+      var dropped = (earlyDrop && i === earlyIdx) || (midDrop && i === midIdx) || (lateDrop && i === lateIdx);
+      x.fillStyle = dropped ? 'rgba(237,28,36,0.10)' : paper;
+      x.fillRect(cx, y0, cw, ch);
+      x.strokeStyle = dropped ? alps : ink;
+      x.lineWidth = dropped ? 1.5 : 1;
+      x.strokeRect(cx, y0, cw, ch);
+      if(cw >= 22) label('t' + (i+1), cx + (cw>=34?8:3), y0 + ch - 10, dropped ? alps : grey, cw>=34?11:9, '500');
+    }
+
+    // summary fold over early turns (only when history is being compressed)
+    var foldTurns = Math.min(n, 4);
+    var foldW = foldTurns*(cw+gap) - gap;
+    if(s === 'summary' || s === 'truncate'){
+      x.strokeStyle = mono; x.lineWidth = 1.5; x.setLineDash([5,4]);
+      x.strokeRect(x0 - 3, y0 - 10, foldW + 6, ch + 20);
+      x.setLineDash([]);
+      label(s === 'summary' ? 'summary fold' : 'truncation cut', x0, y0 - 16, mono, 11, '600');
+      x.beginPath(); x.moveTo(x0 + foldW - 12, y0 - 10); x.lineTo(x0 + foldW + 3, y0 - 10); x.lineTo(x0 + foldW + 3, y0 + 5); x.closePath();
+      x.fillStyle = mono; x.fill();
+    } else {
+      label('persistent history — no compression fold', x0, y0 - 16, grey, 11, '600');
+    }
+
+    // 85% budget marker line — Alps red ONLY when actually over budget; ink otherwise
+    var meterColor = overBudget ? alps : ink;
+    x.strokeStyle = meterColor; x.lineWidth = 1; x.setLineDash([3,3]);
+    x.beginPath(); x.moveTo(budgetX, y0 - 22); x.lineTo(budgetX, y0 + ch + 14); x.stroke();
+    x.setLineDash([]);
+    var ctxPct = Math.round(ctx*100);
+    label(overflow ? 'OVERFLOW ' + ctxPct + '% (>100%)'
+        : overBudget ? 'over 85% budget — ' + ctxPct + '%'
+        : 'within budget — ' + ctxPct + '%',
+        budgetX + 6, y0 - 22 + 10, meterColor, 10.5, '600');
+
+    // dropped-fact callout — red, ONLY when the current config actually drops a fact
+    if(anyDropped){
+      var calloutIdx = earlyDrop ? earlyIdx : (midDrop ? midIdx : lateIdx);
+      var cause = overflow ? 'dropped fact (overflow)'
+                : earlyDrop ? (s === 'summary' ? 'dropped fact (summarized away)' : 'dropped fact (truncation)')
+                : 'dropped fact (lost in the middle)';
+      label(cause, x0 + Math.min(calloutIdx, n-3)*(cw+gap), y0 + ch + 28, alps, 11, '600');
+    } else {
+      label('all facts retained — no dropped cells', x0, y0 + ch + 28, grey, 11, '600');
+    }
+
+    // ── persistent fact-block — sits OUTSIDE the summarized history ──
+    var fy = y0 + ch + 60;
+    // The fact-block only anchors specifics when the strategy actually re-injects it.
+    var blockActive = (s === 'persist');
+    x.strokeStyle = blockActive ? ink : grey; x.lineWidth = blockActive ? 1.5 : 1;
+    if(!blockActive) x.setLineDash([4,3]);
+    x.strokeRect(40, fy, 360, 96);
+    x.setLineDash([]);
+    label('PERSISTENT FACT-BLOCK  (re-injected every request)', 52, fy + 22, blockActive ? ink : grey, 11.5, '600');
+    label('amount: $47.32      date: March 15', 52, fy + 46, blockActive ? mono : grey, 12, '500');
+    label('order #: 88-204417   status: disputed', 52, fy + 66, blockActive ? mono : grey, 12, '500');
+    label(blockActive ? 'survives summarization & truncation' : 'not configured — specifics unanchored', 52, fy + 86, grey, 11, '400');
+
+    // arrow from fact-block into the window (only when the block is active)
+    if(blockActive){
+      x.strokeStyle = mono; x.lineWidth = 1.5;
+      x.beginPath(); x.moveTo(400, fy + 20); x.lineTo(x0 + foldW/2, y0 + ch + 16); x.stroke();
+      x.beginPath(); x.moveTo(x0 + foldW/2, y0 + ch + 16); x.lineTo(x0 + foldW/2 + 8, y0 + ch + 22); x.lineTo(x0 + foldW/2 + 2, y0 + ch + 26); x.closePath();
+      x.fillStyle = mono; x.fill();
+    }
+
+    // ── subagent + scratchpad offload (only when offload is enabled) ──
+    var sx = 440;
+    var offActive = offload;
+    x.strokeStyle = offActive ? ink : grey; x.lineWidth = 1;
+    if(!offActive) x.setLineDash([4,3]);
+    x.strokeRect(sx, fy, 150, 42);
+    label('Subagent', sx + 12, fy + 26, offActive ? ink : grey, 12.5, '500');
+    x.strokeRect(sx, fy + 54, 150, 42);
+    label('Scratchpad file', sx + 12, fy + 80, offActive ? ink : grey, 12.5, '500');
+    x.setLineDash([]);
+    x.strokeStyle = offActive ? ink : grey;
+    x.beginPath(); x.moveTo(sx + 75, fy + 42); x.lineTo(sx + 75, fy + 54); x.stroke();
+    label(offActive ? 'verbose discovery kept' : 'offload OFF — verbose output', sx + 162, fy + 24, grey, 11, '400');
+    label(offActive ? 'OUT of main context' : 'crams into main context', sx + 162, fy + 40, grey, 11, '400');
+
+    // ── cached prefix block above the turn bar (5.1 efficiency) ──────────
+    // Active = ink; the failure mode (uncached, re-billed) is flagged in Alps red.
+    var px = x0, py = y0 - 48, pw = Math.min(barW, 320), phh = 16;
+    x.fillStyle = cache ? paper : 'rgba(237,28,36,0.10)';
+    x.fillRect(px, py, pw, phh);
+    x.strokeStyle = cache ? ink : alps; x.lineWidth = cache ? 1.5 : 1;
+    if(!cache) x.setLineDash([4,3]);
+    x.strokeRect(px, py, pw, phh);
+    x.setLineDash([]);
+    label(cache ? 'CACHED PREFIX — 180-page doc re-used, not re-billed' + '  · tool dumps trimmed'
+               : 'UNCACHED PREFIX — full doc re-sent & re-billed each turn  · raw tool dumps',
+          px + pw + 8, py + 12, cache ? grey : alps, 10.5, '600');
+
+    // ── human-review gate (5.5) — confidence calibration ─────────────────
+    // Calibrated gate (good) drawn in ink; the failure mode (errors shipped) in red.
+    var gx = 40, gy = fy + 116;
+    var calibrated = (rev === 'calibrated');
+    var shipsErrors = (rev !== 'calibrated');
+    x.strokeStyle = calibrated ? ink : alps; x.lineWidth = calibrated ? 1.5 : 1;
+    if(!calibrated) x.setLineDash([4,3]);
+    x.strokeRect(gx, gy, 300, 56);
+    x.setLineDash([]);
+    label('HUMAN-REVIEW GATE', gx + 12, gy + 22, calibrated ? ink : alps, 11.5, '600');
+    var gateTxt = rev === 'calibrated' ? 'calibrated threshold → low-confidence routed to human'
+                : rev === 'selfreport' ? 'self-reported confidence → confidently-wrong slip through'
+                : 'no gate → every extraction auto-shipped';
+    label(gateTxt, gx + 12, gy + 42, calibrated ? mono : alps, 11, '500');
+    // path out of the gate: review (ink) vs ship (red on failure)
+    x.strokeStyle = calibrated ? ink : grey; x.lineWidth = 1;
+    x.beginPath(); x.moveTo(gx + 300, gy + 18); x.lineTo(gx + 330, gy + 18); x.stroke();
+    label('→ human review', gx + 334, gy + 22, calibrated ? ink : grey, 10.5, '500');
+    x.strokeStyle = shipsErrors ? alps : grey; x.lineWidth = 1;
+    if(!shipsErrors) x.setLineDash([3,3]);
+    x.beginPath(); x.moveTo(gx + 300, gy + 40); x.lineTo(gx + 330, gy + 40); x.stroke();
+    x.setLineDash([]);
+    label(shipsErrors ? '→ errors shipped' : '→ none shipped unchecked', gx + 334, gy + 44, shipsErrors ? alps : grey, 10.5, '500');
+  }
+
+  // ── Knowledge check — 6 questions ──────────────────────────────────────
+  var KC = [
+    {
+      q: 'After 30 turns, a contract-analysis agent confuses dollar amounts and dates from different sections. Which change best fixes this?',
+      options: [
+        'Summarize earlier turns more aggressively and start fresh sessions far more often',
+        'Pin amounts, dates, and order numbers in a persistent fact-block per request',
+        'Enable extended thinking on follow-up turns for better numerical recall',
+        'Increase the context-window size so more history is retained'
+      ],
+      correct: 1,
+      explain: 'A persistent fact-block keeps specific values anchored in every request, independent of how history is compressed; aggressive summarization makes the loss worse.'
+    },
+    {
+      q: 'A single-pass extraction over a 180-page contract reliably gets the first and last 30 pages but misses clauses in the middle. What is the cause?',
+      options: [
+        'The model ran out of output tokens — raise max_tokens',
+        'The extraction prompt only matches patterns near the opening and closing document boundaries',
+        'The "lost in the middle" effect — attention weakens mid-input',
+        'Middle sections use formatting the schema cannot match'
+      ],
+      correct: 2,
+      explain: 'Reliable at start and end but weak in the middle is the signature of the lost-in-the-middle position effect; lead summaries and section headers mitigate it.'
+    },
+    {
+      q: 'During a long codebase exploration the agent starts citing "typical MVC patterns" instead of the custom architecture found earlier. Best remediation?',
+      options: [
+        'Upgrade the model version to handle longer sessions',
+        'Restart the session with more specific questions',
+        'Run /compact repeatedly and keep cramming all exploration into the main context window',
+        'Delegate discovery to subagents and persist findings to scratchpad files'
+      ],
+      correct: 3,
+      explain: 'Verbose output filled the window and degraded the main context; subagents isolate that output and scratchpad files persist findings across context boundaries. /compact helps but is not a substitute.'
+    },
+    {
+      q: 'A tool lookup returns a 45-field record but only 5 fields are relevant to the task. What is the correct context approach?',
+      options: [
+        'Trim the result to the 5 relevant fields before appending to context',
+        'Include all 45 fields — the model will reliably focus on just the relevant ones',
+        'Summarize all 45 fields into prose before appending',
+        'Cache the full record and retrieve fields on demand each turn'
+      ],
+      correct: 0,
+      explain: 'Trimming verbose tool output keeps irrelevant tokens from accumulating and pushing important content into unreliable middle positions; prose summarization risks the same condensation loss.'
+    },
+    {
+      q: 'Each turn of a long document-analysis session re-sends the same unchanging 180-page contract as the prompt prefix, and per-turn token cost keeps climbing. What is the most effective fix?',
+      options: [
+        'Prompt-cache the stable document prefix so it is re-used, not re-billed every turn',
+        'Switch to a smaller, cheaper model so each re-sent prefix costs less per token',
+        'Lower the temperature so the model spends fewer tokens reasoning about the document',
+        'Truncate the oldest conversation turns more aggressively to make room in the window'
+      ],
+      correct: 0,
+      explain: 'A stable, unchanging prefix is exactly what prompt caching is for: it is sent once and re-used on later turns instead of re-billed, cutting per-turn cost. Truncation and model swaps do not address re-sending the same prefix.'
+    },
+    {
+      q: 'An extraction system reports 97% overall accuracy and the team wants to auto-ship every extraction the model rates high-confidence. Which routing rule is sound before reducing human review?',
+      options: [
+        'Auto-ship anything the model self-reports as high-confidence, since calibration tracks accuracy',
+        'Route extractions below a threshold calibrated on a labeled validation set to human review',
+        'Skip review entirely once aggregate accuracy crosses 95%, since the error rate is already low',
+        'Route only extractions the model itself flags as uncertain, trusting its self-reported scores'
+      ],
+      correct: 1,
+      explain: 'Model self-reported confidence is not reliably calibrated — the model can be confidently wrong, especially on specific document types; thresholds must be calibrated against a labeled validation set before review is reduced.'
+    }
+  ];
+
+  function renderKC(){
+    var host = document.getElementById('kcHost'); host.innerHTML='';
+    var answered = 0;
+    var prog = document.getElementById('kcProgress');
+    function updateProg(){ prog.textContent = 'Answered ' + answered + ' of ' + KC.length; }
+    updateProg();
+
+    KC.forEach(function(item, qi){
+      var fs = document.createElement('fieldset');
+      fs.style.border = 'none'; fs.style.margin = qi ? '22px 0 0' : '0'; fs.style.padding = '0';
+      var lg = document.createElement('legend'); lg.className = 'kc-q'; lg.style.padding = '0';
+      lg.textContent = (qi+1) + '. ' + item.q; fs.appendChild(lg);
+
+      var done = false;
+      item.options.forEach(function(opt, i){
+        var b = document.createElement('button');
+        b.className = 'kc-opt'; b.type = 'button'; b.textContent = opt;
+        b.addEventListener('click', function(){
+          if(done) return; done = true; answered++; updateProg();
+          Array.prototype.forEach.call(fs.querySelectorAll('.kc-opt'), function(o, j){
+            o.disabled = true;
+            o.dataset.state = j === item.correct ? 'correct' : (j === i ? 'wrong' : 'muted');
+          });
+          var e = document.createElement('div'); e.className = 'kc-exp';
+          e.textContent = (i === item.correct ? 'Correct. ' : 'Not quite. ') + item.explain;
+          fs.appendChild(e);
+        });
+        fs.appendChild(b);
+      });
+      host.appendChild(fs);
+    });
+  }
+
+  // init
+  reset(); drawArch(); renderKC();
+})();
+</script>
+</body>
+</html>

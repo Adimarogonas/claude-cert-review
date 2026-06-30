@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Structured Data Extraction — CarbonSilicon</title>
+<link rel="stylesheet" href="/simulations/csl-sim.css">
+<style>
+  /* sim-specific CSS only — everything brand-level comes from csl-sim.css */
+  .arch-wrap{ position:relative }
+  .run-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px }
+  .cfg-block{ padding-bottom:12px; margin-bottom:12px; border-bottom:1px solid var(--hair) }
+  .cfg-block:last-of-type{ border-bottom:none; margin-bottom:0 }
+  .seg-row{ display:flex; flex-direction:column; gap:6px; margin-bottom:4px }
+  .seg-row > label{ font-size:12px; font-weight:600; color:var(--carbon) }
+  .seg{ flex-wrap:wrap }
+  .seg button{ flex:1 1 auto }
+  .toggle{ margin:2px 0 4px }
+  .cfg-hint{ font-size:11.5px; color:var(--ink-2); line-height:1.45; margin:2px 0 0 }
+  .metrics{ margin-bottom:12px }
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; font-size:11px; color:var(--ink-2) }
+  .legend span{ display:inline-flex; align-items:center; gap:6px }
+  .swatch{ width:11px; height:11px; border-radius:2px; flex:none; border:1px solid var(--hair-2) }
+  .swatch.ink{ background:var(--monolith) }
+  .swatch.red{ background:var(--alps); border-color:var(--alps) }
+  .arch-cap{ font-size:11.5px; color:var(--ink-2); line-height:1.5; margin:10px 0 0; max-width:64ch }
+  .schema-note{ font-family:var(--mono); font-size:11.5px; color:var(--ink-2); margin-top:10px; line-height:1.7 }
+  .schema-note b{ color:var(--carbon) }
+</style>
+</head>
+<body>
+<main class="sim">
+
+  <div class="sim-head-row">
+    <div>
+      <div class="sim-eyebrow">Domain 4 · Interactive Simulation</div>
+      <h1 class="sim-title">Structured Data Extraction</h1>
+    </div>
+    <button class="btn btn--ghost help-btn" id="helpBtn" aria-haspopup="dialog">? Help</button>
+  </div>
+  <p class="sim-deck">An extraction pipeline reads heterogeneous documents (contracts, invoices, filings) and must emit validated JSON for downstream systems. Tune the output method, schema design, and validation loop, then watch which choices fabricate, leak, or self-correct.</p>
+
+  <div class="tabs" role="tablist" aria-label="Simulator sections">
+    <button class="tab" role="tab" id="t-sim"  aria-controls="p-sim"  aria-selected="true">Simulate</button>
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="false">Architecture</button>
+    <button class="tab" role="tab" id="t-kc"   aria-controls="p-kc"   aria-selected="false">Knowledge Check</button>
+  </div>
+
+  <!-- ── Simulate ──────────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-sim" role="tabpanel" aria-labelledby="t-sim">
+    <div class="cols cols-2">
+      <div class="panel">
+        <p class="panel-label">Pipeline configuration</p>
+
+        <div class="cfg-block">
+          <div class="seg-row">
+            <label id="lblOut">Output method</label>
+            <div class="seg" role="group" aria-labelledby="lblOut" id="segOut">
+              <button type="button" data-v="tool" aria-pressed="false">Forced tool-use schema</button>
+              <button type="button" data-v="prose" aria-pressed="true">Parse JSON from prose</button>
+            </div>
+          </div>
+          <p class="cfg-hint">Forced tool use sets <span class="log" style="display:inline;padding:1px 4px">tool_choice: "any"</span> — the model must call an extractor, never returns plain text. Prose-parse fishes JSON out of free text.</p>
+        </div>
+
+        <div class="cfg-block">
+          <label class="toggle">
+            <input type="checkbox" id="cfgEnum">
+            <span class="track"></span>
+            <span>Enum-constrained category fields</span>
+          </label>
+          <p class="cfg-hint">Restrict categorical fields (e.g. <code>doc_type</code>) to a fixed vocabulary, validated programmatically.</p>
+        </div>
+
+        <div class="cfg-block">
+          <div class="seg-row">
+            <label id="lblNull">Genuinely-absent fields</label>
+            <div class="seg" role="group" aria-labelledby="lblNull" id="segNull">
+              <button type="button" data-v="nullable" aria-pressed="false">Optional / nullable</button>
+              <button type="button" data-v="required" aria-pressed="true">Required</button>
+            </div>
+          </div>
+          <p class="cfg-hint">When a date or ID may not exist in the source, required fields structurally pressure the model to invent a value.</p>
+        </div>
+
+        <div class="cfg-block">
+          <label class="toggle">
+            <input type="checkbox" id="cfgRetry">
+            <span class="track"></span>
+            <span>Validate → retry with specific feedback</span>
+          </label>
+          <p class="cfg-hint">On failure, resend the document, the failed extraction, and the exact error so the model self-corrects.</p>
+        </div>
+
+        <div class="cfg-block">
+          <label class="toggle">
+            <input type="checkbox" id="cfgCross">
+            <span class="track"></span>
+            <span>Cross-field validation</span>
+          </label>
+          <p class="cfg-hint">Check relationships strict schemas can't see — line items summing to total, start date before end date.</p>
+        </div>
+
+        <div class="cfg-block">
+          <label class="toggle">
+            <input type="checkbox" id="cfgCriteria">
+            <span class="track"></span>
+            <span>Explicit per-field extraction criteria</span>
+          </label>
+          <p class="cfg-hint">Define each field precisely — what counts, what to skip, what "absent" looks like. Vague descriptions (e.g. <code>"party": "the relevant party"</code>) drive mis-extraction and invented fields.</p>
+        </div>
+
+        <div class="cfg-block">
+          <div class="seg-row">
+            <label id="lblDispatch">Corpus dispatch (2M docs)</label>
+            <div class="seg" role="group" aria-labelledby="lblDispatch" id="segDispatch">
+              <button type="button" data-v="batch" aria-pressed="false">Message Batches API + cached prefix</button>
+              <button type="button" data-v="concurrent" aria-pressed="true">Many concurrent sync calls</button>
+            </div>
+          </div>
+          <p class="cfg-hint">For a very large corpus, the Message Batches API with <strong>prompt caching</strong> of the stable schema/system prefix cuts cost and lifts throughput. Note: the Batches API can't run multi-turn tool-call loops mid-request.</p>
+        </div>
+
+        <div class="run-row">
+          <button class="btn btn--primary" id="runBtn">▶ Run 1,000 docs</button>
+          <button class="btn btn--ghost" id="resetBtn">↺ Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-label">Outcome — 1,000 documents</p>
+        <div class="metrics" id="metrics">
+          <div class="metric"><div class="v tnum" id="mValid">—</div><div class="k">Valid output</div></div>
+          <div class="metric"><div class="v tnum" id="mFab">—</div><div class="k">Fabrication rate</div></div>
+          <div class="metric"><div class="v tnum" id="mRetry">—</div><div class="k">Retry success</div></div>
+          <div class="metric"><div class="v tnum" id="mViol">—</div><div class="k">Schema violations</div></div>
+          <div class="metric"><div class="v tnum" id="mCost">—</div><div class="k">Relative cost</div></div>
+          <div class="metric"><div class="v tnum" id="mTput">—</div><div class="k">Throughput</div></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="meter" id="validMeter"><i></i></div>
+          <div class="metric" style="padding:6px 0 0"><div class="k">Valid-output share</div></div>
+        </div>
+        <div class="log" id="log" style="margin-top:12px" role="log" aria-live="polite" aria-label="Consequence log"></div>
+        <div class="legend" aria-hidden="true">
+          <span><span class="swatch ink"></span> healthy / pass</span>
+          <span><span class="swatch red"></span> failure / fabrication</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+    <div class="panel arch-wrap">
+      <p class="panel-label">Extract → validate → retry loop</p>
+      <canvas id="arch" width="820" height="380" aria-label="Diagram of the extraction pipeline: a document enters a forced tool-use extractor producing JSON, which passes through schema, enum, nullable, and cross-field validators into a retry-with-feedback loop before reaching the downstream sink. Two failure paths are flagged in red: parsing JSON out of prose yields malformed output, and required fields for absent data cause fabricated values."></canvas>
+      <p class="arch-cap">Forced tool use with <b>tool_choice: "any"</b> guarantees structured output and kills JSON syntax errors. Validation still has to catch <b>semantic</b> errors — out-of-vocabulary enums, impossible date ordering, totals that don't sum — and feed specific errors back on retry. The two red paths are the gotchas: prose-parsing (malformed output) and required-for-absent fields (fabrication).</p>
+      <p class="schema-note">
+        <b>required date</b> &rarr; model invents a value to satisfy the schema &nbsp;·&nbsp; <b>nullable date</b> &rarr; model returns <code>null</code> honestly<br>
+        <b>tool_choice: "any"</b> &rarr; always a tool call &nbsp;·&nbsp; <b>tool_choice: "auto"</b> / prose &rarr; may return plain text
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Knowledge Check ───────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-kc" role="tabpanel" aria-labelledby="t-kc" hidden>
+    <div class="panel" id="kcHost"></div>
+  </section>
+
+</main>
+
+<!-- ── Help overlay ────────────────────────────────────────────────────── -->
+<div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <h2 id="helpTitle">How this simulation works</h2>
+    <ol>
+      <li>Set the <strong>pipeline configuration</strong> on the left — output method, schema design, and the validation loop.</li>
+      <li>Press <strong>Run</strong> and read the metrics and the per-choice consequence log.</li>
+      <li>Find the configuration that maximizes valid output and drives fabrication to zero. Watch for the red paths.</li>
+    </ol>
+    <button class="btn btn--primary" id="helpClose">Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function selectTab(tab){
+    tabs.forEach(function(t){
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.setAttribute('tabindex', on ? '0' : '-1');
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if(tab.id === 't-arch') drawArch();
+  }
+  tabs.forEach(function(t, i){
+    t.addEventListener('click', function(){ selectTab(t); });
+    t.addEventListener('keydown', function(e){
+      var idx = null;
+      if(e.key === 'ArrowRight') idx = (i + 1) % tabs.length;
+      else if(e.key === 'ArrowLeft') idx = (i - 1 + tabs.length) % tabs.length;
+      if(idx !== null){ e.preventDefault(); tabs[idx].focus(); selectTab(tabs[idx]); }
+    });
+  });
+
+  // ── Help ───────────────────────────────────────────────────────────────
+  var help = document.getElementById('help'), helpBtn = document.getElementById('helpBtn');
+  helpBtn.addEventListener('click', function(){ help.hidden = false; document.getElementById('helpClose').focus(); });
+  document.getElementById('helpClose').addEventListener('click', function(){ help.hidden = true; helpBtn.focus(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && !help.hidden){ help.hidden = true; helpBtn.focus(); } });
+
+  // ── Segmented controls ─────────────────────────────────────────────────
+  function segValue(id){
+    var btns = document.querySelectorAll('#' + id + ' button');
+    for(var i=0;i<btns.length;i++){ if(btns[i].getAttribute('aria-pressed') === 'true') return btns[i].getAttribute('data-v'); }
+    return null;
+  }
+  function wireSeg(id){
+    var grp = document.getElementById(id);
+    grp.addEventListener('click', function(e){
+      var b = e.target.closest('button'); if(!b) return;
+      Array.prototype.forEach.call(grp.querySelectorAll('button'), function(x){
+        x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+      });
+    });
+  }
+  wireSeg('segOut'); wireSeg('segNull'); wireSeg('segDispatch');
+
+  // ── Log helper ─────────────────────────────────────────────────────────
+  var logEl = document.getElementById('log'), step = 0;
+  function log(msg, cls){
+    var d = document.createElement('div');
+    d.className = 'log-line' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<span class="t">' + String(++step).padStart(2,'0') + '</span>  ' + msg;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ── Model: config → deterministic consequences (THE teaching core) ──────
+  // Baseline assumes a well-behaved pipeline; each gotcha visibly degrades metrics.
+  function run(){
+    logEl.innerHTML=''; step=0;
+    var out   = segValue('segOut');     // 'tool' | 'prose'
+    var enums = document.getElementById('cfgEnum').checked;
+    var nul   = segValue('segNull');    // 'nullable' | 'required'
+    var retry = document.getElementById('cfgRetry').checked;
+    var cross = document.getElementById('cfgCross').checked;
+    var criteria = document.getElementById('cfgCriteria').checked;
+    var dispatch = segValue('segDispatch'); // 'batch' | 'concurrent'
+
+    // metric accumulators (percentages 0..100, violation count is absolute)
+    var valid = 96, fab = 1, viol = 12, retrySucc = null;
+    var cost = 100, tput = 100; // 4.5: relative cost (lower better) & throughput index
+
+    // (a) Output method ---------------------------------------------------
+    if(out === 'tool'){
+      log('Forced tool use (tool_choice: "any") — every response is a tool call, JSON syntax errors eliminated.', 'step');
+    } else {
+      valid -= 24; viol += 140; fab += 3;
+      log('Prose-parse: ~16% of responses are malformed or wrapped in commentary the parser chokes on.', 'bad');
+      log('Model can return plain text instead of structured JSON — no structural guarantee.', 'bad');
+    }
+
+    // (b) Enum constraint -------------------------------------------------
+    if(enums){
+      log('Enum-constrained category fields — out-of-vocabulary values rejected at validation.', 'step');
+    } else {
+      valid -= 7; viol += 55;
+      log('No enum constraint: model invents out-of-vocabulary categories (e.g. a 6th doc_type).', 'bad');
+    }
+
+    // (c) Nullable vs required for absent data ----------------------------
+    if(nul === 'nullable'){
+      log('Optional/nullable fields — when a date or ID is genuinely absent, the model returns null honestly.', 'step');
+    } else {
+      fab += 14; valid -= 4;
+      log('Required fields for absent data — model fabricates plausible dates/IDs to satisfy the schema.', 'bad');
+    }
+
+    // (d) Validate-then-retry with specific feedback ----------------------
+    if(retry){
+      retrySucc = 71;
+      valid += 3; viol = Math.max(0, viol - 30);
+      log('Retry-with-feedback: failed extraction + exact error resent; many format/structural errors self-correct.', 'step');
+      // retries cannot recover info that is simply absent
+      if(nul === 'required'){
+        retrySucc -= 22;
+        log('But retries can\'t conjure absent data — for required-but-missing fields the model just re-fabricates.', 'bad');
+      }
+      if(out === 'prose'){ retrySucc -= 16; log('Prose-parse failures are noisy; feedback is less targeted, retry success drops.', 'bad'); }
+    } else {
+      valid -= 6; viol += 20;
+      log('No retry loop: recoverable format/structural errors go uncaught and ship downstream.', 'bad');
+    }
+
+    // (e) Cross-field validation ------------------------------------------
+    if(cross){
+      viol = Math.max(0, viol - 18);
+      log('Cross-field validation: catches impossible orderings (start>end) and totals that don\'t sum.', 'step');
+    } else {
+      valid -= 5; viol += 38;
+      log('No cross-field check: semantically wrong but schema-valid records (bad date order, mismatched totals) pass.', 'bad');
+    }
+
+    // (f) Explicit per-field extraction criteria (4.1) --------------------
+    if(criteria){
+      fab = Math.max(0, fab - 2); viol = Math.max(0, viol - 34); valid += 3;
+      log('Explicit per-field criteria: each field has a precise definition of what to extract and what to skip — mis-extractions collapse.', 'step');
+    } else {
+      fab += 6; viol += 46; valid -= 6;
+      log('Vague field descriptions ("the relevant party") — model mis-extracts and emits false fields it guessed from ambiguity.', 'bad');
+    }
+
+    // (g) Corpus dispatch for very large volumes (4.5) --------------------
+    if(dispatch === 'batch'){
+      cost -= 55; tput += 70;
+      log('Message Batches API + prompt-cached schema/system prefix: ~50% cost cut, far higher sustained throughput on the 2M-doc corpus.', 'step');
+      log('Caveat: the Batches API can\'t run multi-turn tool-call loops mid-request — keep agentic tool use on the synchronous API.', 'step');
+    } else {
+      cost += 48; tput -= 38;
+      log('Many concurrent synchronous calls: no batch discount, the stable prefix is re-sent uncached, and rate limits throttle throughput.', 'bad');
+    }
+
+    // clamp ---------------------------------------------------------------
+    valid = Math.max(40, Math.min(99, Math.round(valid)));
+    fab   = Math.max(0, Math.min(40, Math.round(fab)));
+    viol  = Math.max(0, Math.round(viol));
+    cost  = Math.max(20, Math.round(cost));
+    tput  = Math.max(20, Math.round(tput));
+
+    var fabBad   = fab >= 5;
+    var validBad = valid < 90;
+
+    set('mValid', valid + '%', validBad);
+    set('mFab',  fab + '%', fabBad);
+    set('mRetry', retry ? Math.max(0, retrySucc) + '%' : 'off', retry && retrySucc < 50);
+    set('mViol', viol, viol > 40);
+    set('mCost', cost + '%', cost > 110);
+    set('mTput', tput + '%', tput < 90);
+    meter('validMeter', valid/100, validBad);
+
+    if(out === 'tool' && enums && nul === 'nullable' && retry && cross){
+      log('Pipeline is clean: forced schema + enums + nullable + retry + cross-field validation. Ship it.', 'step');
+    } else {
+      log('Run complete — inspect the red lines above for the failure paths.', 'step');
+    }
+
+    // Keep the Architecture diagram in sync with the config this run used.
+    drawArch();
+  }
+
+  function set(id, val, bad){ var el=document.getElementById(id); el.textContent=val; el.classList.toggle('is-bad', !!bad); }
+  function meter(id, frac, bad){
+    var m=document.getElementById(id);
+    m.classList.toggle('is-bad', !!bad);
+    var fill = m.firstElementChild;
+    if(reduceMotion) fill.style.transition = 'none';
+    fill.style.width = Math.max(0, Math.min(100, frac*100)) + '%';
+  }
+  function reset(){
+    logEl.innerHTML=''; step=0;
+    ['mValid','mFab','mRetry','mViol','mCost','mTput'].forEach(function(i){ set(i,'—',false); });
+    meter('validMeter',0,false);
+    // Redraw the diagram against the current (post-reset) config.
+    drawArch();
+  }
+
+  document.getElementById('runBtn').addEventListener('click', run);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  // ── Canvas diagram (hairline ink on paper; red ONLY for ACTIVE anti-patterns) ──
+  function drawArch(){
+    var c = document.getElementById('arch'), x = c.getContext('2d');
+    var INK='#1a1a1a', RED='#ed1c24';
+
+    // Read CURRENT config — same values run() uses — so the diagram tracks
+    // whichever anti-patterns are live right now. Red ONLY when active.
+    var out   = segValue('segOut');     // 'tool' | 'prose'
+    var nul    = segValue('segNull');    // 'nullable' | 'required'
+    var enums = document.getElementById('cfgEnum').checked;
+    var retry = document.getElementById('cfgRetry').checked;
+    var cross = document.getElementById('cfgCross').checked;
+    var criteria = document.getElementById('cfgCriteria').checked;
+    var dispatch = segValue('segDispatch'); // 'batch' | 'concurrent'
+
+    var dispatchBad = (dispatch !== 'batch'); // concurrent-sync anti-pattern
+    var criteriaOff = !criteria;              // vague-field anti-pattern
+    var proseBad = (out === 'prose');     // prose-parse → malformed path
+    var fabBad   = (nul === 'required');  // required+absent → fabrication path
+    var retryOff = !retry;                // missing validation/retry element
+    var crossOff = !cross;                // missing cross-field validation element
+    var enumOff  = !enums;                // enum-missing indicator
+
+    // Use the canvas's INTRINSIC pixel dimensions (c.width/c.height), not the
+    // CSS box — these are valid even while the Architecture pane is hidden.
+    x.clearRect(0,0,c.width,c.height);
+    x.lineWidth=1.4; x.font='13px "FDJR Text", system-ui, sans-serif'; x.textBaseline='middle';
+
+    function box(bx,by,bw,bh,label,red){
+      x.strokeStyle = red ? RED : '#000'; x.lineWidth = 1.4;
+      x.strokeRect(bx,by,bw,bh);
+      x.fillStyle = red ? RED : '#000';
+      var lines = label.split('\n');
+      var y0 = by + bh/2 - (lines.length-1)*8;
+      lines.forEach(function(ln,i){ x.fillText(ln, bx+12, y0 + i*16); });
+      return {x:bx,y:by,w:bw,h:bh};
+    }
+    function arrow(x1,y1,x2,y2,red){
+      x.strokeStyle = red ? RED : INK; x.fillStyle = red ? RED : INK; x.lineWidth = 1.4;
+      x.beginPath(); x.moveTo(x1,y1); x.lineTo(x2,y2); x.stroke();
+      var a = Math.atan2(y2-y1, x2-x1);
+      x.beginPath();
+      x.moveTo(x2,y2);
+      x.lineTo(x2 - 7*Math.cos(a - 0.4), y2 - 7*Math.sin(a - 0.4));
+      x.lineTo(x2 - 7*Math.cos(a + 0.4), y2 - 7*Math.sin(a + 0.4));
+      x.closePath(); x.fill();
+    }
+    function tag(tx,ty,text,red){
+      x.fillStyle = red ? RED : '#6b675f'; x.font='11px "FDJR Text", system-ui, sans-serif';
+      x.fillText(text, tx, ty); x.font='13px "FDJR Text", system-ui, sans-serif';
+    }
+
+    // 4.5 corpus dispatch stage — feeds the corpus into the document/extractor.
+    // Red ONLY when many-concurrent-sync (no batch / no prompt cache) is active.
+    var disp = box(24, 244, 130, 56,
+        dispatchBad ? 'Concurrent sync\nuncached prefix' : 'Batches API\ncached prefix', dispatchBad);
+    tag(disp.x, disp.y + disp.h + 14,
+        dispatchBad ? '2M docs · no batch discount' : '2M docs · ~50% cheaper', dispatchBad);
+
+    // main row
+    var doc  = box(24,150,110,56,'Document');
+    var ext  = box(176,150,140,56,'Extractor\ntool_choice "any"', proseBad);
+    // Validate box reads cross-field status; the enum line flags red when enums off.
+    var val  = box(358,150,150,56,'Validate\nschema · enum\ncross-field', crossOff);
+
+    var sink = box(686,150,110,56,'Downstream');
+
+    // enum-missing indicator — red ONLY when enum constraint is off
+    tag(val.x+12, val.y - 16, enumOff ? 'enum constraint missing' : 'enum constrained', enumOff);
+
+    // dispatch → document feed (corpus entering the pipeline)
+    arrow(disp.x + disp.w/2, disp.y, doc.x + doc.w/2, doc.y + doc.h, dispatchBad);
+
+    // 4.1 criteria node — defines what each field means before extraction.
+    // Red ONLY when explicit per-field criteria are off (vague descriptions).
+    tag(ext.x, ext.y + ext.h + 16,
+        criteriaOff ? 'vague field criteria → mis-extraction' : 'explicit per-field criteria', criteriaOff);
+
+    // main arrows
+    arrow(doc.x+doc.w, 178, ext.x, 178);
+    arrow(ext.x+ext.w, 178, val.x, 178);
+
+    // pass path → sink
+    arrow(val.x+val.w, 178, sink.x, 178);
+    tag(val.x+val.w+8, 166, 'valid');
+
+    // retry loop — validate back to extractor with feedback.
+    // Red ONLY when the validate→retry loop is off (missing-retry anti-pattern).
+    x.strokeStyle = retryOff ? RED : INK; x.lineWidth = 1.4;
+    x.beginPath();
+    x.moveTo(val.x+val.w/2, val.y+val.h);
+    x.lineTo(val.x+val.w/2, 300);
+    x.lineTo(ext.x+ext.w/2, 300);
+    x.stroke();
+    arrow(ext.x+ext.w/2, 300, ext.x+ext.w/2, ext.y+ext.h, retryOff);
+    tag(val.x+val.w/2 - 132, 300,
+        retryOff ? 'no validate → retry loop' : 'retry with specific error feedback',
+        retryOff);
+
+    // Failure path 1: prose-parse → malformed output.
+    // Red ONLY when output method is prose-parse.
+    arrow(ext.x+ext.w/2, ext.y, ext.x+ext.w/2, 70, proseBad);
+    box(176, 26, 200, 42, 'prose-parse → malformed JSON', proseBad);
+    tag(ext.x+ext.w/2 - 38, 80, proseBad ? 'tool_choice "auto"' : 'tool_choice "any"', proseBad);
+
+    // Failure path 2: required-for-absent → fabrication.
+    // Red ONLY when absent-fields method is required.
+    arrow(val.x+val.w/2, val.y, val.x+val.w/2, 70, fabBad);
+    box(420, 26, 220, 42, fabBad ? 'required + absent → fabricated value'
+                                 : 'nullable + absent → honest null', fabBad);
+    tag(val.x+val.w/2 - 30, 80, fabBad ? 'no null option' : 'null option present', fabBad);
+  }
+
+  // ── Knowledge Check (6 questions) ──────────────────────────────────────
+  var KC = [
+    {
+      q: 'A pipeline processes documents of unknown type and must always return structured JSON, never plain text. Which tool_choice setting guarantees this?',
+      options: [
+        'tool_choice: "auto" — the model calls a tool when it judges structure is needed',
+        'tool_choice: "any" — the model must call a tool but picks the right extractor',
+        'No tool_choice — providing the tools makes plain-text replies unlikely'
+      ],
+      correct: 1,
+      explain: 'tool_choice "any" guarantees a tool call (never plain text) while letting the model choose the correct extractor; "auto" allows text replies, and omitting it is merely probabilistic.'
+    },
+    {
+      q: 'A required contract_start_date field forces the model to invent a date for documents that never contained one. What is the correct schema fix?',
+      options: [
+        'Add a prompt note: "output null if the date is absent" while leaving the required field in the schema untouched',
+        'Make the field optional and nullable so the model returns null when the data is absent',
+        'Add an enum with "unknown" as an allowed value for the date'
+      ],
+      correct: 1,
+      explain: 'Required fields with no null option structurally pressure the model to fabricate; making the field optional/nullable removes that pressure. A prompt note fights the schema, and an enum only fits categorical fields.'
+    },
+    {
+      q: 'Tool use eliminated JSON syntax errors, yet validation finds line_items summing to $4,850 while total_amount reads $5,200. What is this and how do you handle it?',
+      options: [
+        'A schema syntax error — strict mode should catch it at validation time',
+        'Expected variance — real invoices carry rounding and tax differences that should pass through untouched',
+        'A semantic error — add cross-field validation and retry naming the discrepancy'
+      ],
+      correct: 2,
+      explain: 'Strict schemas guarantee structure, not cross-field logic. A mismatched total is a semantic error caught by cross-field validation and fixed via retry that names the exact discrepancy.'
+    },
+    {
+      q: 'An invoice number is genuinely absent from the document (it lives in a separate file the agent cannot see). The team adds retry-with-feedback. Will it help?',
+      options: [
+        'No — the information is absent from the source, so retries just push the model to fabricate',
+        'Yes — error feedback makes the model re-scan the document far more thoroughly each retry pass',
+        'Yes — retries reliably resolve this as a format-mismatch problem'
+      ],
+      correct: 0,
+      explain: 'Retries recover format and structural errors, not missing information. If the value is not in the source, retrying drives fabrication; the fix is a nullable field or supplying the right document.'
+    },
+    {
+      q: 'You must extract structured JSON from a 2-million-document corpus where results are reviewed the next day. The schema and system prefix are identical on every call. What maximizes throughput at lowest cost?',
+      options: [
+        'Fire thousands of concurrent synchronous requests so every document is processed in parallel as fast as possible',
+        'Use the Message Batches API and prompt-cache the stable schema/system prefix',
+        'Send each document synchronously one at a time to keep ordering deterministic and avoid any rate-limit errors'
+      ],
+      correct: 1,
+      explain: 'The Batches API gives ~50% cost savings for latency-tolerant work, and prompt caching the unchanging schema/system prefix avoids re-paying for it on every request. Concurrent sync calls hit rate limits and miss the batch discount; one-at-a-time is far too slow at this scale.'
+    },
+    {
+      q: 'A field defined as "party": "the relevant party" produces inconsistent extractions and invented sub-fields. The output is valid JSON. What is the highest-leverage fix?',
+      options: [
+        'Lower temperature and append "be accurate and do not make anything up" to the system prompt for every request',
+        'Replace it with explicit criteria: which named entity, from where in the document, and null when absent',
+        'Switch the whole pipeline to the Message Batches API so the same ambiguous field is at least processed more cheaply at scale'
+      ],
+      correct: 1,
+      explain: 'Vague descriptions cause mis-extraction and false fields; an explicit per-field definition (what to extract, from where, and what "absent" means) removes the ambiguity. Temperature and a generic "be accurate" note do not give objective rules, and batching only changes cost, not correctness.'
+    }
+  ];
+  function renderKC(){
+    var host = document.getElementById('kcHost'); host.innerHTML='';
+    KC.forEach(function(item, qi){
+      var fs = document.createElement('fieldset');
+      fs.style.border='none'; fs.style.margin='0'; fs.style.padding='0';
+      fs.style.marginBottom = qi < KC.length-1 ? '26px' : '0';
+      var lg = document.createElement('legend');
+      lg.className='kc-q'; lg.style.padding='0';
+      lg.textContent = (qi+1) + '. ' + item.q;
+      fs.appendChild(lg);
+
+      var answered = false;
+      item.options.forEach(function(opt,i){
+        var b=document.createElement('button');
+        b.className='kc-opt'; b.type='button'; b.textContent=opt;
+        b.addEventListener('click', function(){
+          if(answered) return; answered = true;
+          Array.prototype.forEach.call(fs.querySelectorAll('.kc-opt'), function(o,j){
+            o.disabled=true;
+            o.dataset.state = j===item.correct ? 'correct' : (j===i ? 'wrong' : 'muted');
+          });
+          var e=document.createElement('div'); e.className='kc-exp';
+          e.textContent = (i===item.correct ? 'Correct. ' : 'Not quite. ') + item.explain;
+          fs.appendChild(e);
+        });
+        fs.appendChild(b);
+      });
+      host.appendChild(fs);
+    });
+  }
+
+  // init
+  reset(); renderKC();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+/*
+ * csl-sim.css — Shared CarbonSilicon Labs brand kit for the interactive
+ * domain simulators (served same-origin, embedded via sandboxed <iframe>).
+ *
+ * Austere modernism: warm paper, Carbon ink, Monolith grey for active/pass,
+ * Alps Red ONLY for the single highest-emphasis / danger signal. Hairline
+ * chrome (borders 8–12% black), near-square corners, Forma DJR typography,
+ * tabular figures for all metrics. No gradients, no second accent hue.
+ *
+ * Every simulator links this file, then adds only its own sim-specific CSS.
+ */
+
+/* ── Forma DJR — local brand faces (same-origin /fonts/forma) ─────────────── */
+@font-face { font-family:"FDJR Text";    src:url("/fonts/forma/FormaDJRText-Regular.otf")    format("opentype"); font-weight:400; font-display:swap }
+@font-face { font-family:"FDJR Text";    src:url("/fonts/forma/FormaDJRText-Medium.otf")     format("opentype"); font-weight:500; font-display:swap }
+@font-face { font-family:"FDJR Text";    src:url("/fonts/forma/FormaDJRText-Bold.otf")       format("opentype"); font-weight:700; font-display:swap }
+@font-face { font-family:"FDJR Display"; src:url("/fonts/forma/FormaDJRDisplay-Medium.otf")   format("opentype"); font-weight:500; font-display:swap }
+@font-face { font-family:"FDJR Deck";    src:url("/fonts/forma/FormaDJRDeck-Regular.otf")     format("opentype"); font-weight:400; font-display:swap }
+@font-face { font-family:"FDJR Deck";    src:url("/fonts/forma/FormaDJRDeck-Medium.otf")      format("opentype"); font-weight:500; font-display:swap }
+@font-face { font-family:"FDJR Deck";    src:url("/fonts/forma/FormaDJRDeck-Bold.otf")        format("opentype"); font-weight:700; font-display:swap }
+
+:root {
+  /* sealed palette */
+  --carbon:#000000; --intelligence:#f5f3ee; --monolith:#1a1a1a; --alps:#ed1c24;
+  --paper:#fbfaf6; --sunken:#ece9e1;
+  --ink-2:#6b675f;                 /* warm grey, AA on paper */
+  --hair:rgba(0,0,0,0.10);         /* hairline chrome */
+  --hair-2:rgba(0,0,0,0.24);
+  --focus:0 0 0 3px rgba(0,0,0,0.18);
+
+  /* simulator semantics — derived only from the sealed palette */
+  --sim-good:var(--carbon);        /* a healthy / correct metric reads as ink */
+  --sim-fill:var(--monolith);      /* meter fill, active slab */
+  --sim-bad:var(--alps);           /* the ONE red: failure / danger / over-threshold */
+
+  --font-display:"FDJR Display","FDJR Deck",system-ui,sans-serif;
+  --font-deck:"FDJR Deck","FDJR Text",system-ui,sans-serif;
+  --font-text:"FDJR Text",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+
+  --r-sm:2px; --r-md:3px; --r-lg:4px;
+}
+
+*,*::before,*::after{ box-sizing:border-box }
+
+html,body{
+  margin:0; padding:0;
+  background:var(--intelligence);
+  color:var(--carbon);
+  font-family:var(--font-text);
+  font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+
+.tnum{ font-variant-numeric:tabular-nums }
+
+/* ── Shell ────────────────────────────────────────────────────────────────── */
+.sim{ max-width:880px; margin:0 auto; padding:22px 20px 64px }
+
+.sim-eyebrow{
+  font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.12em;
+  color:var(--ink-2); margin-bottom:8px;
+}
+.sim-title{
+  font-family:var(--font-display); font-weight:500; letter-spacing:-.02em;
+  font-size:clamp(1.5rem,2vw + .6rem,2.25rem); line-height:1.08; margin:0 0 6px;
+}
+.sim-deck{
+  font-family:var(--font-deck); color:var(--ink-2); font-size:15px; line-height:1.55;
+  margin:0 0 18px; max-width:62ch;
+}
+.sim-head-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px }
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+.tabs{ display:flex; gap:0; border-bottom:1px solid var(--hair); margin:6px 0 22px }
+.tab{
+  appearance:none; min-height:0; background:none; border:none;
+  border-bottom:2px solid transparent; margin-bottom:-1px;
+  padding:.6rem 1.05rem; font-family:var(--font-text); font-size:13px; font-weight:400;
+  color:var(--ink-2); cursor:pointer; transition:color .12s, border-color .12s;
+}
+.tab[aria-selected="true"]{ color:var(--carbon); font-weight:600; border-bottom-color:var(--carbon) }
+.tab:focus-visible{ outline:none; box-shadow:var(--focus) }
+.tabpane[hidden]{ display:none }
+
+/* ── Panels / layout ──────────────────────────────────────────────────────── */
+.panel{
+  background:var(--paper); border:1px solid var(--hair); border-radius:var(--r-md);
+  padding:1rem 1.1rem; box-shadow:0 1px 0 rgba(0,0,0,.04),0 1px 2px rgba(0,0,0,.05);
+}
+.panel + .panel{ margin-top:14px }
+.panel-label{
+  font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.1em;
+  color:var(--ink-2); margin:0 0 12px;
+}
+.cols{ display:grid; gap:14px }
+@media(min-width:680px){ .cols-2{ grid-template-columns:1fr 1fr } .cols-3{ grid-template-columns:1fr 1fr 1fr } }
+
+/* ── Controls ─────────────────────────────────────────────────────────────── */
+.field{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px }
+.field > label{ font-size:12px; font-weight:600; color:var(--carbon) }
+.field .hint{ font-size:11.5px; color:var(--ink-2); line-height:1.45 }
+
+select, input[type="text"], input[type="number"]{
+  appearance:none; font-family:var(--font-text); font-size:13.5px; color:var(--carbon);
+  background:var(--paper); border:1px solid var(--hair-2); border-radius:var(--r-sm);
+  padding:.5rem .6rem; min-height:2.4rem;
+}
+select:focus-visible, input:focus-visible{ outline:none; box-shadow:var(--focus); border-color:var(--carbon) }
+
+/* segmented control (mutually-exclusive choices) */
+.seg{ display:inline-flex; border:1px solid var(--hair-2); border-radius:var(--r-sm); overflow:hidden }
+.seg button{
+  min-height:0; border:none; border-radius:0; background:var(--paper); color:var(--ink-2);
+  padding:.45rem .8rem; font-size:12.5px; font-weight:500; border-right:1px solid var(--hair);
+}
+.seg button:last-child{ border-right:none }
+.seg button[aria-pressed="true"]{ background:var(--carbon); color:var(--intelligence) }
+.seg button:hover:not([aria-pressed="true"]){ background:var(--sunken) }
+
+/* toggle switch — ink fill when on */
+.toggle{ display:inline-flex; align-items:center; gap:10px; cursor:pointer; user-select:none; font-size:13px }
+.toggle input{ position:absolute; opacity:0; width:0; height:0 }
+.toggle .track{
+  width:38px; height:22px; border-radius:11px; background:var(--sunken);
+  border:1px solid var(--hair-2); position:relative; transition:background .14s,border-color .14s; flex:none;
+}
+.toggle .track::after{
+  content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%;
+  background:var(--paper); border:1px solid var(--hair-2); transition:transform .14s;
+}
+.toggle input:checked + .track{ background:var(--carbon); border-color:var(--carbon) }
+.toggle input:checked + .track::after{ transform:translateX(16px); border-color:var(--carbon) }
+.toggle input:focus-visible + .track{ box-shadow:var(--focus) }
+
+/* buttons */
+button.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;
+  min-height:2.6rem; padding:.6rem 1.05rem; border-radius:var(--r-md);
+  border:1px solid var(--hair-2); background:var(--paper); color:var(--carbon);
+  font-family:var(--font-text); font-size:14px; font-weight:500; line-height:1.4;
+  transition:background .14s,border-color .14s,color .14s,box-shadow .14s;
+}
+button.btn:hover:not(:disabled){ background:var(--sunken); border-color:var(--carbon) }
+button.btn:focus-visible{ outline:none; box-shadow:var(--focus) }
+button.btn:disabled{ opacity:.45; cursor:default }
+button.btn--primary{ background:var(--carbon); border-color:var(--carbon); color:var(--intelligence) }
+button.btn--primary:hover:not(:disabled){ background:var(--monolith); border-color:var(--monolith) }
+button.btn--accent{ background:var(--alps); border-color:var(--alps); color:var(--intelligence) }
+button.btn--accent:hover:not(:disabled){ background:#d3151c; border-color:#d3151c }
+button.btn--ghost{ background:transparent; border-color:var(--hair); color:var(--ink-2) }
+button.btn--ghost:hover:not(:disabled){ border-color:var(--carbon); color:var(--carbon) }
+
+/* ── Metrics & meters ─────────────────────────────────────────────────────── */
+.metrics{ display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:1px; background:var(--hair); border:1px solid var(--hair); border-radius:var(--r-md); overflow:hidden }
+.metric{ background:var(--paper); padding:.8rem .9rem }
+.metric .v{ font-family:var(--font-display); font-weight:500; font-size:1.6rem; letter-spacing:-.02em; line-height:1; font-variant-numeric:tabular-nums }
+.metric .v.is-bad{ color:var(--alps) }
+.metric .k{ font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.09em; color:var(--ink-2); margin-top:6px }
+.metric .d{ font-size:11px; color:var(--ink-2); margin-top:3px }
+
+.meter{ height:6px; border-radius:3px; background:var(--sunken); overflow:hidden }
+.meter > i{ display:block; height:100%; width:0; background:var(--monolith); transition:width .5s cubic-bezier(.4,0,.2,1) }
+.meter.is-bad > i{ background:var(--alps) }
+
+/* badges / pills */
+.badge{ display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600; letter-spacing:.04em;
+  padding:.18rem .5rem; border-radius:999px; border:1px solid var(--hair-2); color:var(--ink-2); background:var(--paper) }
+.badge--ink{ background:var(--carbon); border-color:var(--carbon); color:var(--intelligence) }
+.badge--alps{ border-color:var(--alps); color:var(--alps) }
+
+/* log / console (mono) */
+.log{ font-family:var(--mono); font-size:12px; line-height:1.7; background:var(--sunken);
+  border:1px solid var(--hair); border-radius:var(--r-sm); padding:.7rem .8rem; max-height:260px; overflow:auto }
+.log-line{ white-space:pre-wrap; color:var(--carbon) }
+.log-line .t{ color:var(--ink-2) }              /* timestamp / dim */
+.log-line.bad{ color:var(--alps) }
+.log-line.step{ font-weight:600 }
+
+canvas{ display:block; width:100%; height:auto; background:var(--paper); border-radius:var(--r-sm) }
+
+/* ── Knowledge check ──────────────────────────────────────────────────────── */
+.kc-q{ font-family:var(--font-deck); font-weight:500; font-size:15.5px; line-height:1.5; margin:0 0 14px }
+.kc-opt{ display:block; width:100%; text-align:left; margin-bottom:9px; padding:.7rem .85rem;
+  border:1px solid var(--hair); border-radius:var(--r-sm); background:var(--paper); color:var(--carbon);
+  font-family:var(--font-text); font-size:13.5px; line-height:1.5; cursor:pointer; min-height:0; transition:border-color .12s,background .12s }
+.kc-opt:hover:not(:disabled){ border-color:var(--carbon) }
+.kc-opt[data-state="correct"]{ background:var(--monolith); border-color:var(--monolith); color:var(--intelligence) }
+.kc-opt[data-state="wrong"]{ border-color:var(--alps); color:var(--alps) }
+.kc-opt[data-state="muted"]{ opacity:.5 }
+.kc-exp{ margin-top:8px; padding:.7rem .85rem; background:var(--sunken); border-left:2px solid var(--carbon);
+  border-radius:var(--r-sm); font-size:12.5px; line-height:1.6; color:var(--carbon) }
+
+/* ── Help overlay ─────────────────────────────────────────────────────────── */
+.help-btn{ flex:none }
+.help{ position:fixed; inset:0; background:rgba(245,243,238,.92); backdrop-filter:blur(2px);
+  display:flex; align-items:center; justify-content:center; padding:24px; z-index:50 }
+.help[hidden]{ display:none }
+.help-card{ background:var(--paper); border:1px solid var(--hair-2); border-radius:var(--r-lg);
+  padding:1.6rem 1.7rem; max-width:520px; box-shadow:0 8px 40px rgba(0,0,0,.12) }
+.help-card h2{ font-family:var(--font-display); font-weight:500; font-size:1.4rem; margin:0 0 .6rem }
+.help-card ol{ margin:0 0 1.2rem; padding-left:1.1rem }
+.help-card li{ margin-bottom:.5rem; font-size:14px; line-height:1.5 }
+
+.sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0 }
+
+@media(max-width:560px){
+  .sim{ padding:16px 14px 48px }
+  button.btn{ width:100% }
+}

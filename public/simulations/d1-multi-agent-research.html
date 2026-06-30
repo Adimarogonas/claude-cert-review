@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-Agent Research System — CarbonSilicon</title>
+<link rel="stylesheet" href="/simulations/csl-sim.css">
+<style>
+  /* sim-specific CSS only — everything brand-level comes from csl-sim.css */
+  .arch-wrap{ position:relative }
+  .run-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px }
+  .seg-field{ margin-bottom:14px }
+  .seg-field > .panel-label{ margin-bottom:8px }
+  .seg{ flex-wrap:wrap }
+  .verdict{ margin-top:12px; padding:.7rem .85rem; border:1px solid var(--hair-2); border-radius:var(--r-sm);
+    font-size:12.5px; line-height:1.55; background:var(--paper) }
+  .verdict.is-bad{ border-color:var(--alps); color:var(--alps) }
+  .verdict.is-bad strong{ color:var(--alps) }
+  .metric .d.bad{ color:var(--alps) }
+  .kc-item + .kc-item{ margin-top:22px; padding-top:22px; border-top:1px solid var(--hair) }
+  .arch-note{ font-size:11.5px; color:var(--ink-2); margin:10px 0 0; line-height:1.5 }
+  .arch-note .flag{ color:var(--alps); font-weight:600 }
+  @media(max-width:560px){ canvas{ min-height:300px } }
+</style>
+</head>
+<body>
+<main class="sim">
+
+  <div class="sim-head-row">
+    <div>
+      <div class="sim-eyebrow">Domain 1 · Interactive Simulation</div>
+      <h1 class="sim-title">Multi-Agent Research System</h1>
+    </div>
+    <button class="btn btn--ghost help-btn" id="helpBtn" aria-haspopup="dialog">? Help</button>
+  </div>
+  <p class="sim-deck">A coordinator delegates a research topic to specialized subagents — web search, document
+    analysis, synthesis, report. Configure how it orchestrates them, then watch coverage, attribution, wall-clock
+    time, context-bleed and token cost respond to each decision.</p>
+
+  <div class="tabs" role="tablist" aria-label="Simulator sections">
+    <button class="tab" role="tab" id="t-sim"  aria-controls="p-sim"  aria-selected="true">Simulate</button>
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="false">Architecture</button>
+    <button class="tab" role="tab" id="t-kc"   aria-controls="p-kc"   aria-selected="false">Knowledge Check</button>
+  </div>
+
+  <!-- ── Simulate ──────────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-sim" role="tabpanel" aria-labelledby="t-sim">
+    <div class="cols cols-2">
+      <div class="panel">
+        <p class="panel-label">Coordinator configuration</p>
+
+        <div class="seg-field">
+          <p class="panel-label">Subagent context</p>
+          <div class="seg" id="segContext" role="group" aria-label="Subagent context model">
+            <button type="button" data-v="isolated" aria-pressed="false">Isolated + explicit passing</button>
+            <button type="button" data-v="shared" aria-pressed="true">Shared full history</button>
+          </div>
+          <span class="hint">Subagents start fresh; the Agent-tool prompt is the only channel. Sharing the full
+            coordinator history bleeds one subtopic into another.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label">Execution</p>
+          <div class="seg" id="segExec" role="group" aria-label="Execution pattern">
+            <button type="button" data-v="parallel" aria-pressed="false">Parallel Task calls</button>
+            <button type="button" data-v="sequential" aria-pressed="true">Sequential</button>
+          </div>
+          <span class="hint">Independent subtasks have no data dependency — parallel drops wall-clock from
+            sum-of-tasks to max-of-tasks.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label">Subagent selection</p>
+          <div class="seg" id="segSelect" role="group" aria-label="Subagent selection">
+            <button type="button" data-v="dynamic" aria-pressed="false">Dynamic selection</button>
+            <button type="button" data-v="full" aria-pressed="true">Always run full pipeline</button>
+          </div>
+          <span class="hint">Routing every query through all four agents burns tokens on simple questions.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label">Decomposition</p>
+          <div class="seg" id="segDecomp" role="group" aria-label="Decomposition quality">
+            <button type="button" data-v="broad" aria-pressed="false">Broad (all domains)</button>
+            <button type="button" data-v="narrow" aria-pressed="true">Narrow</button>
+          </div>
+          <span class="hint">Narrow decomposition assigns only some domains — the rest are never researched.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label">Subagent loop termination</p>
+          <div class="seg" id="segTerm" role="group" aria-label="Subagent loop termination signal">
+            <button type="button" data-v="stopreason" aria-pressed="false">stop_reason==end_turn (+ turn cap)</button>
+            <button type="button" data-v="cap" aria-pressed="false">Fixed iteration cap</button>
+            <button type="button" data-v="text" aria-pressed="true">Parse "DONE" from text</button>
+          </div>
+          <span class="hint">stop_reason is the canonical termination signal, with a turn cap only as a backstop.
+            Parsing text for "DONE" is model-phrasing dependent; a fixed cap as the <em>primary</em> signal cuts loops
+            off mid-research or burns extra turns.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label">Publish gate (before writing report to production)</p>
+          <div class="seg" id="segPublish" role="group" aria-label="Publish gate enforcement">
+            <button type="button" data-v="hook" aria-pressed="false">Deterministic PreToolUse hook</button>
+            <button type="button" data-v="reviewer" aria-pressed="false">Reviewer subagent</button>
+            <button type="button" data-v="prompt" aria-pressed="true">System-prompt instruction</button>
+          </div>
+          <span class="hint">Publishing to a shared/production destination is irreversible. A PreToolUse hook on the
+            publish tool blocks it deterministically until review passes. A prompt instruction or a reviewer agent that
+            can be talked around both have a non-zero failure rate — unreviewed reports reach production.</span>
+        </div>
+
+        <label class="toggle" style="margin-bottom:6px">
+          <input type="checkbox" id="cfgAttrib">
+          <span class="track"></span>
+          <span>Track provenance / attribution (claim→source mappings)</span>
+        </label>
+        <span class="hint" style="display:block; margin-bottom:14px">Off → claims arrive at synthesis without source
+          URLs, dates or excerpts, producing unattributed report statements.</span>
+
+        <div class="run-row">
+          <button class="btn btn--primary" id="runBtn">▶ Run</button>
+          <button class="btn btn--ghost" id="resetBtn">↺ Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-label">Outcome</p>
+        <div class="metrics" id="metrics">
+          <div class="metric"><div class="v tnum" id="mCover">—</div><div class="k">Topic coverage</div></div>
+          <div class="metric"><div class="v tnum" id="mAttr">—</div><div class="k">Attribution accuracy</div></div>
+          <div class="metric"><div class="v tnum" id="mTime">—</div><div class="k">Wall-clock</div></div>
+          <div class="metric"><div class="v tnum" id="mBleed">—</div><div class="k">Context-bleed / errors</div></div>
+          <div class="metric"><div class="v tnum" id="mTok">—</div><div class="k">Token cost</div></div>
+          <div class="metric"><div class="v tnum" id="mWaste">—</div><div class="k">Wasted / lost turns</div></div>
+          <div class="metric"><div class="v tnum" id="mPub">—</div><div class="k">Unreviewed publish risk</div></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="meter" id="coverMeter"><i></i></div>
+          <div class="metric" style="padding:6px 0 0"><div class="k">Coverage of the research scope</div></div>
+        </div>
+        <div class="verdict" id="verdict" role="status" aria-live="polite">Configure the coordinator, then press
+          <strong>Run</strong>.</div>
+        <div class="log" id="log" style="margin-top:12px" aria-live="polite" role="log"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+    <div class="panel arch-wrap">
+      <p class="panel-label">Hub-and-spoke — coordinator orchestrates subagents</p>
+      <canvas id="arch" width="820" height="380" role="img"
+        aria-label="Hub-and-spoke diagram: a central coordinator connects to four subagents — web search, document analysis, synthesis and report. The report node hands off to a production destination through a publish gate. A direct subagent-to-subagent edge, a shared-context leak, and an unenforced publish gate are flagged in red as anti-patterns."></canvas>
+      <p class="arch-note">Every result flows <em>through</em> the coordinator, which passes explicit context in each
+        Agent-tool prompt; the finished report is then handed to a production destination through a publish gate.
+        <span class="flag">Red</span> marks the anti-patterns: a direct subagent→subagent edge (bypasses the hub), a
+        shared-context leak (cross-topic bleed), and a publish gate enforced by anything other than a deterministic
+        PreToolUse hook. None belong in a clean hub-and-spoke.</p>
+    </div>
+  </section>
+
+  <!-- ── Knowledge Check ───────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-kc" role="tabpanel" aria-labelledby="t-kc" hidden>
+    <div class="panel" id="kcHost"></div>
+  </section>
+
+</main>
+
+<!-- ── Help overlay ────────────────────────────────────────────────────── -->
+<div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <h2 id="helpTitle">How this simulation works</h2>
+    <ol>
+      <li>Set the <strong>coordinator configuration</strong> on the left.</li>
+      <li>Press <strong>Run</strong>. The deterministic model maps each choice to metrics and logs the consequence.</li>
+      <li>Sound choices push coverage and attribution up; the gotchas degrade metrics and turn red.</li>
+      <li>Open <strong>Architecture</strong> to see the hub-and-spoke pattern and its anti-patterns, and
+        <strong>Knowledge Check</strong> to test the gotchas.</li>
+    </ol>
+    <button class="btn btn--primary" id="helpClose">Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function selectTab(tab){
+    tabs.forEach(function(t){
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if(tab.id === 't-arch') drawArch();
+  }
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){ selectTab(t); });
+    t.addEventListener('keydown', function(e){
+      var i = tabs.indexOf(t), n = tabs.length;
+      if(e.key === 'ArrowRight'){ e.preventDefault(); var a=tabs[(i+1)%n]; selectTab(a); a.focus(); }
+      if(e.key === 'ArrowLeft'){ e.preventDefault(); var b=tabs[(i-1+n)%n]; selectTab(b); b.focus(); }
+    });
+  });
+
+  // ── Help ───────────────────────────────────────────────────────────────
+  var help = document.getElementById('help');
+  document.getElementById('helpBtn').addEventListener('click', function(){ help.hidden = false; document.getElementById('helpClose').focus(); });
+  document.getElementById('helpClose').addEventListener('click', function(){ help.hidden = true; });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') help.hidden = true; });
+
+  // ── Segmented controls (mutually-exclusive) ────────────────────────────
+  var seg = {};
+  ['segContext','segExec','segSelect','segDecomp','segTerm','segPublish'].forEach(function(id){
+    var grp = document.getElementById(id);
+    var btns = Array.prototype.slice.call(grp.querySelectorAll('button'));
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        btns.forEach(function(o){ o.setAttribute('aria-pressed', o===b ? 'true':'false'); });
+        seg[id] = b.getAttribute('data-v');
+      });
+    });
+    seg[id] = grp.querySelector('[aria-pressed="true"]').getAttribute('data-v');
+  });
+
+  // ── Log helper ─────────────────────────────────────────────────────────
+  var logEl = document.getElementById('log'), step = 0;
+  function log(msg, cls){
+    var d = document.createElement('div');
+    d.className = 'log-line' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<span class="t">' + String(++step).padStart(2,'0') + '</span>  ' + msg;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ── Model: config → deterministic metrics (the teaching core) ──────────
+  function run(){
+    logEl.innerHTML=''; step=0;
+    var ctx = seg.segContext, exec = seg.segExec, select = seg.segSelect,
+        decomp = seg.segDecomp, attrib = document.getElementById('cfgAttrib').checked,
+        term = seg.segTerm, publish = seg.segPublish;
+
+    var cover = 0.96;       // topic coverage
+    var attr  = 0.94;       // source-attribution accuracy
+    var time  = 7.2;        // wall-clock seconds
+    var bleed = 0.02;       // context-bleed / error rate
+    var tok   = 100;        // token cost index (baseline broad+dynamic pipeline)
+    var waste = 0.00;       // wasted / lost turns from a bad termination signal
+    var pub   = 0.01;       // probability an unreviewed report reaches production
+
+    log('Coordinator decomposes the topic and delegates via the Task tool.', 'step');
+
+    // (e) decomposition quality
+    if(decomp === 'broad'){
+      log('Broad decomposition assigns every relevant domain to a subagent.', 'step');
+    } else {
+      cover -= 0.55; tok -= 18;
+      log('Narrow decomposition: only some domains assigned — the rest are never researched.', 'bad');
+    }
+
+    // (a) subagent context
+    if(ctx === 'isolated'){
+      log('Subagents run in isolated context; coordinator passes explicit context per prompt.', 'step');
+    } else {
+      bleed += 0.34; cover -= 0.06; attr -= 0.05; tok += 26;
+      log('Shared full history → cross-topic bleed; one subtopic contaminates another.', 'bad');
+    }
+
+    // (b) execution
+    if(exec === 'parallel'){
+      log('Independent subtasks dispatched as parallel Task calls — wall-clock ≈ max-of-tasks.', 'step');
+    } else {
+      time += 14.5;
+      log('Sequential execution — wall-clock = sum-of-tasks, far higher for independent work.', 'bad');
+    }
+
+    // (c) subagent selection
+    if(select === 'dynamic'){
+      log('Coordinator dynamically selects only the subagents the query needs.', 'step');
+    } else {
+      tok += 38; time += 2.0;
+      log('Always running the full pipeline wastes tokens on queries that need fewer agents.', 'bad');
+    }
+
+    // (d) provenance / attribution
+    if(attrib){
+      log('Provenance tracked: claim→source mappings (URLs, dates, excerpts) survive synthesis.', 'step');
+    } else {
+      attr -= 0.62;
+      log('Attribution off → synthesis emits unattributed claims; report citations are unsupported.', 'bad');
+    }
+
+    // (f) subagent loop termination signal
+    if(term === 'stopreason'){
+      log('Each subagent loops on stop_reason: continue on "tool_use", stop on "end_turn" — turn cap is a backstop only.', 'step');
+    } else if(term === 'cap'){
+      waste += 0.30; cover -= 0.18; tok += 14; time += 1.5;
+      log('Fixed iteration cap as the primary signal: loops halt mid-research (truncated coverage) or spin to the cap (wasted turns).', 'bad');
+    } else {
+      waste += 0.22; bleed += 0.06; time += 1.0;
+      log('Parsing "DONE" from text: model phrasing varies — loops miss the cue and over-run, or stop early on a stray "done".', 'bad');
+    }
+
+    // (g) publish gate before writing the finished report to production
+    if(publish === 'hook'){
+      pub = 0.00;
+      log('PreToolUse hook on the publish tool blocks it until review passes — deterministic, the model cannot bypass it.', 'step');
+    } else if(publish === 'reviewer'){
+      pub += 0.18;
+      log('Reviewer subagent gates the publish — but it can be talked around; an unreviewed report can still reach production.', 'bad');
+    } else {
+      pub += 0.45;
+      log('System-prompt instruction only: probabilistic compliance — the irreversible publish fires unreviewed on some runs.', 'bad');
+    }
+
+    cover = clamp(cover); attr = clamp(attr); bleed = clamp(bleed);
+    waste = clamp(waste); pub = clamp(pub);
+    time  = Math.max(0, time); tok = Math.max(0, Math.round(tok));
+
+    set('mCover', pct(cover), cover < 0.80);
+    set('mAttr',  pct(attr),  attr  < 0.80);
+    set('mTime',  time.toFixed(1)+'s', time > 12);
+    set('mBleed', pct(bleed), bleed > 0.10);
+    set('mTok',   tok, tok > 130);
+    set('mWaste', pct(waste), waste > 0.10);
+    set('mPub',   pct(pub),   pub   > 0.05);
+    meter('coverMeter', cover, cover < 0.80);
+
+    var problems = [];
+    if(decomp === 'narrow') problems.push('coverage gaps from narrow decomposition');
+    if(ctx === 'shared') problems.push('context bleed across subtopics');
+    if(exec === 'sequential') problems.push('high wall-clock from serial execution');
+    if(select === 'full') problems.push('wasted tokens running the full pipeline');
+    if(!attrib) problems.push('unattributed claims');
+    if(term === 'cap') problems.push('iteration cap as the primary stop signal (truncated / wasted turns)');
+    if(term === 'text') problems.push('parsing "DONE" text instead of stop_reason');
+    if(publish === 'prompt') problems.push('publish gated only by a prompt instruction (no enforcement)');
+    if(publish === 'reviewer') problems.push('publish gated by a talk-around-able reviewer agent');
+
+    var v = document.getElementById('verdict');
+    if(problems.length === 0){
+      v.className = 'verdict';
+      v.innerHTML = '<strong>Clean hub-and-spoke.</strong> Broad decomposition, isolated context with explicit ' +
+        'passing, parallel dynamic dispatch, tracked provenance, stop_reason-driven loop termination and a ' +
+        'deterministic publish hook — every metric is healthy.';
+      log('Run complete — configuration is sound.', 'step');
+    } else {
+      v.className = 'verdict is-bad';
+      v.innerHTML = '<strong>Anti-patterns present:</strong> ' + problems.join('; ') + '.';
+      log('Run complete — ' + problems.length + ' anti-pattern' + (problems.length>1?'s':'') + ' degraded the run.', 'bad');
+    }
+
+    // Refresh the Architecture diagram to reflect the config just run.
+    drawArch();
+  }
+
+  function clamp(x){ return Math.max(0, Math.min(1, x)); }
+  function pct(x){ return Math.round(x*100) + '%'; }
+  function set(id, val, bad){ var el=document.getElementById(id); el.textContent=val; el.classList.toggle('is-bad', !!bad); }
+  function meter(id, frac, bad){ var m=document.getElementById(id); m.classList.toggle('is-bad', !!bad); m.firstElementChild.style.width=Math.min(100,frac*100)+'%'; }
+
+  function reset(){
+    logEl.innerHTML='';
+    ['mCover','mAttr','mTime','mBleed','mTok','mWaste','mPub'].forEach(function(i){ set(i,'—',false); });
+    meter('coverMeter',0,false);
+    var v=document.getElementById('verdict'); v.className='verdict';
+    v.innerHTML='Configure the coordinator, then press <strong>Run</strong>.';
+    // Redraw the diagram so it reflects the current (default anti-pattern) config.
+    drawArch();
+  }
+
+  document.getElementById('runBtn').addEventListener('click', run);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  // ── Canvas: hub-and-spoke (hairline ink on paper) ──────────────────────
+  // Reads the CURRENT config (same values run() reads from seg[] / DOM) and
+  // flags each diagram element in Alps red ONLY while its anti-pattern is
+  // active; once the learner fixes it, that element returns to normal ink.
+  function drawArch(){
+    var c = document.getElementById('arch');
+    // Use intrinsic canvas dimensions so it renders correctly even while the
+    // Architecture pane is hidden (display:none → clientWidth would be 0).
+    var W = c.width, H = c.height;
+    var x = c.getContext('2d');
+    x.setTransform(1,0,0,1,0,0);
+    x.clearRect(0,0,W,H);
+
+    // Live config — same sources run() uses.
+    var ctx    = seg.segContext,
+        exec   = seg.segExec,
+        select = seg.segSelect,
+        decomp = seg.segDecomp,
+        attrib = document.getElementById('cfgAttrib').checked;
+    var sharedLeak = ctx === 'shared';        // cross-topic bleed / direct edge
+    var serial     = exec === 'sequential';   // high wall-clock spokes
+    var fullPipe   = select === 'full';       // every spoke fired regardless of need
+    var narrow     = decomp === 'narrow';     // some domains never researched
+    var noAttrib   = !attrib;                 // unattributed claims at report
+    var ungated    = (seg.segPublish !== 'hook'); // publish→prod not blocked by a deterministic hook
+
+    var ink = '#1a1a1a', red = '#ed1c24';
+    x.font = '13px "FDJR Text", system-ui, sans-serif';
+    x.textBaseline = 'middle';
+
+    // coordinator hub (center)
+    var hub = { x: W/2, y: H/2, w: 150, h: 56 };
+    // subagent spokes
+    var labels = ['Web Search','Doc Analysis','Synthesis','Report'];
+    var R = Math.min(W,H)/2 - 70;
+    var nodes = labels.map(function(l, i){
+      var ang = -Math.PI/2 + i * (Math.PI*2/labels.length);
+      return { x: W/2 + Math.cos(ang)*R, y: H/2 + Math.sin(ang)*R, w: 132, h: 48, label: l };
+    });
+
+    function box(b, label, opt){
+      opt = opt || {};
+      x.lineWidth = opt.red ? 1.6 : 1.2;
+      x.strokeStyle = opt.red ? red : '#000';
+      x.fillStyle = '#fbfaf6';
+      var rx = b.x - b.w/2, ry = b.y - b.h/2;
+      x.beginPath(); x.rect(rx, ry, b.w, b.h); x.fill(); x.stroke();
+      x.fillStyle = opt.red ? red : '#000';
+      x.textAlign = 'center';
+      x.fillText(label, b.x, b.y);
+    }
+
+    // spoke edges (coordinator <-> subagent).
+    // Narrow decomposition → some domains (Doc Analysis, here) are never
+    // researched: flag that unassigned spoke red. Sequential execution → the
+    // serial wall-clock cost shows on the spoke edges.
+    nodes.forEach(function(n, i){
+      var unassigned = narrow && i === 1;          // a domain left out of the decomposition
+      x.lineWidth = (serial || unassigned) ? 1.6 : 1.1;
+      x.strokeStyle = (serial || unassigned) ? red : ink;
+      x.save();
+      if(unassigned) x.setLineDash([4,4]);          // dashed = never researched
+      x.beginPath(); x.moveTo(hub.x, hub.y); x.lineTo(n.x, n.y); x.stroke();
+      x.restore();
+    });
+
+    // ANTI-PATTERN 1: direct subagent->subagent edge (Search -> Synthesis).
+    // Only present while context is "shared" (cross-topic bleed bypassing hub);
+    // isolated + explicit passing removes it.
+    if(sharedLeak){
+      x.save();
+      x.lineWidth = 1.8; x.strokeStyle = red; x.setLineDash([6,4]);
+      x.beginPath(); x.moveTo(nodes[0].x, nodes[0].y); x.lineTo(nodes[2].x, nodes[2].y); x.stroke();
+      x.restore();
+    }
+
+    // draw nodes — red only where that node's anti-pattern is active.
+    box(hub, 'Coordinator');
+    nodes.forEach(function(n, i){
+      var redNode =
+        (i === 0 && fullPipe) ||                    // Web Search fired needlessly on simple queries
+        (i === 1 && narrow)   ||                    // Doc Analysis domain never assigned
+        (i === 2 && sharedLeak) ||                  // Synthesis receives bled cross-topic context
+        (i === 3 && noAttrib);                      // Report emits unattributed claims
+      box(n, n.label, { red: redNode });
+    });
+
+    // PUBLISH GATE: the Report node hands off to a Production destination through
+    // a gate. The publish action is irreversible. The gate edge is Alps red while
+    // the publish is NOT blocked by a deterministic PreToolUse hook (prompt-only or
+    // talk-around-able reviewer); a hook returns it to normal ink.
+    var rep  = nodes[3];
+    var prod = { x: rep.x, y: Math.min(H - 30, rep.y + 84), w: 120, h: 44 };
+    x.save();
+    x.lineWidth = ungated ? 1.8 : 1.2;
+    x.strokeStyle = ungated ? red : ink;
+    if(ungated) x.setLineDash([6,4]);             // dashed = unenforced gate
+    x.beginPath(); x.moveTo(rep.x, rep.y + rep.h/2); x.lineTo(prod.x, prod.y - prod.h/2); x.stroke();
+    x.restore();
+    // small gate label on the edge
+    x.save();
+    x.font = '11px "FDJR Text", system-ui, sans-serif';
+    x.fillStyle = ungated ? red : ink;
+    x.textAlign = 'center';
+    x.fillText(ungated ? 'no hook' : 'hook', (rep.x + prod.x)/2 + 30, (rep.y + rep.h/2 + prod.y - prod.h/2)/2);
+    x.restore();
+    box(prod, 'Production', { red: ungated });
+
+    // ANTI-PATTERN 2: shared-context leak badge near hub — only when shared.
+    if(sharedLeak){
+      x.save();
+      x.setLineDash([3,3]); x.lineWidth = 1.4; x.strokeStyle = red;
+      var lx = W/2 - 70, ly = H - 26;
+      x.beginPath(); x.rect(lx-6, ly-12, 250, 24); x.stroke();
+      x.setLineDash([]);
+      x.fillStyle = red; x.textAlign = 'left';
+      x.font = '12px "FDJR Text", system-ui, sans-serif';
+      x.fillText('✕  shared-context leak · direct edge = anti-pattern', lx, ly);
+      x.restore();
+    }
+  }
+  window.addEventListener('resize', function(){
+    if(!document.getElementById('p-arch').hidden) drawArch();
+  });
+
+  // ── Knowledge check (6 questions from the gotchas) ─────────────────────
+  var KC = [
+    {
+      q: 'A research report on "AI’s impact on creative industries" covers only visual arts. Logs show the ' +
+         'coordinator decomposed it into "AI in digital art", "AI in graphic design" and "AI in photography", and ' +
+         'every subagent completed successfully. What is the root cause?',
+      options: [
+        'The decomposition is too narrow — only visual-arts subtopics were assigned.',
+        'The synthesis agent filtered out the non-visual findings because of a training-data bias toward visual art.',
+        'The web search agent’s queries were not broad enough to surface music or writing results.',
+        'The document analysis agent applied overly restrictive relevance criteria.'
+      ],
+      correct: 0,
+      explain: 'The subagents performed correctly within their assigned scope; the non-visual domains were never in ' +
+        'the decomposition, so the coordinator’s narrow decomposition is the root cause.'
+    },
+    {
+      q: 'The synthesis subagent needs findings from the web search and document analysis subagents. How does the ' +
+         'coordinator pass that context?',
+      options: [
+        'The coordinator includes the findings in the Agent-tool prompt it sends to the synthesis subagent.',
+        'Subagents share a session-level memory store that the synthesis agent reads from directly each turn.',
+        'Findings accumulate in a shared conversation history that every subagent can access on each turn.',
+        'The coordinator passes a session ID the synthesis agent uses to look up prior outputs.'
+      ],
+      correct: 0,
+      explain: 'Subagents start fresh and don’t inherit history — the Agent-tool prompt string is the only ' +
+        'channel, so all needed context must be passed explicitly. Shared history would cause cross-topic bleed.'
+    },
+    {
+      q: 'You have three independent research subtasks — academic papers, news scraping, and a knowledge-base query. ' +
+         'Which execution pattern minimizes total wall-clock time?',
+      options: [
+        'Parallel subagents run all three concurrently, then the coordinator synthesizes.',
+        'Sequential execution through a single agent to avoid context conflicts between the tasks.',
+        'A prompt chain in which each task’s output is fed in as the next task’s input.',
+        'Run the most complex task first, then the others sequentially.'
+      ],
+      correct: 0,
+      explain: 'With no data dependencies, parallel Task calls drop wall-clock from sum-of-tasks to max-of-tasks; ' +
+        'sequential patterns only help when tasks have ordering dependencies.'
+    },
+    {
+      q: 'A coordinator always routes every query through all four subagents — even simple factual questions. What ' +
+         'is the best improvement?',
+      options: [
+        'Have the coordinator analyze each query and dynamically select only the subagents it needs.',
+        'Add more specialized subagents so query handling can be split into finer-grained stages each run.',
+        'Remove the coordinator and let users pick the subagents they want manually.',
+        'Add a step that maps each query to a fixed pipeline template.'
+      ],
+      correct: 0,
+      explain: 'Dynamic subagent selection avoids wasted tokens and latency on simple queries; always running the ' +
+        'full pipeline spends resources regardless of need.'
+    },
+    {
+      q: 'Each research subagent runs an agentic loop. Which signal should primarily decide when a subagent stops ' +
+         'iterating?',
+      options: [
+        'stop_reason == "end_turn", with a turn cap only as a backstop.',
+        'A fixed iteration cap, so the loop always halts after a set number of turns regardless of the model state.',
+        'Whether the assistant’s text output contains a completion word such as "DONE" or "FINISHED".',
+        'Whether the most recent tool returned an empty or null result, indicating nothing more to fetch.'
+      ],
+      correct: 0,
+      explain: 'stop_reason is the canonical termination signal — "end_turn" means the model is done. A cap is a ' +
+        'safety backstop, and text-phrase parsing is model-phrasing dependent (early stops or over-runs).'
+    },
+    {
+      q: 'The coordinator must never publish a finished report to the production destination until review passes — ' +
+         'publishing is irreversible. The model occasionally publishes anyway despite a system-prompt rule. What ' +
+         'enforces this reliably?',
+      options: [
+        'A PreToolUse hook on the publish tool that blocks the call until review has passed.',
+        'Move the "do not publish before review" rule to the very top of the coordinator’s system prompt for salience.',
+        'Add a reviewer subagent that inspects the report and tells the coordinator whether it is allowed to publish.',
+        'Several few-shot examples in the prompt showing the coordinator waiting for review before it ever publishes.'
+      ],
+      correct: 0,
+      explain: 'A PreToolUse hook is deterministic — it blocks the irreversible publish regardless of what the model ' +
+        'decides. Prompt position, reviewer agents and few-shot examples are all probabilistic and can be bypassed.'
+    }
+  ];
+
+  function renderKC(){
+    var host = document.getElementById('kcHost'); host.innerHTML='';
+    KC.forEach(function(item, qi){
+      var wrap = document.createElement('div'); wrap.className = 'kc-item';
+      var q = document.createElement('p'); q.className='kc-q';
+      q.textContent = (qi+1) + '. ' + item.q; wrap.appendChild(q);
+      item.options.forEach(function(opt,i){
+        var b=document.createElement('button'); b.className='kc-opt'; b.type='button'; b.textContent=opt;
+        b.addEventListener('click', function(){
+          var opts = wrap.querySelectorAll('.kc-opt');
+          Array.prototype.forEach.call(opts, function(o,j){
+            o.disabled=true; o.dataset.state = j===item.correct ? 'correct' : (j===i ? 'wrong' : 'muted');
+          });
+          if(!wrap.querySelector('.kc-exp')){
+            var e=document.createElement('div'); e.className='kc-exp';
+            e.textContent = (i===item.correct ? 'Correct. ' : 'Not quite. ') + item.explain;
+            wrap.appendChild(e);
+          }
+        });
+        wrap.appendChild(b);
+      });
+      host.appendChild(wrap);
+    });
+  }
+
+  // ── init ───────────────────────────────────────────────────────────────
+  reset(); renderKC(); // reset() draws the Architecture diagram at the default state
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reliability Controls for an Operations Pipeline — CarbonSilicon</title>
+<link rel="stylesheet" href="/simulations/csl-sim.css">
+<style>
+  /* sim-specific CSS only — everything brand-level comes from csl-sim.css */
+  .arch-wrap{ position:relative }
+  .run-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px }
+  .seg-field{ margin-bottom:16px }
+  .seg-field > .panel-label{ margin-bottom:8px }
+  .seg{ flex-wrap:wrap }
+  .verdict{ margin-top:12px; padding:.7rem .85rem; border:1px solid var(--hair-2); border-radius:var(--r-sm);
+    font-size:12.5px; line-height:1.55; background:var(--paper) }
+  .verdict.is-bad{ border-color:var(--alps); color:var(--alps) }
+  .verdict.is-bad strong{ color:var(--alps) }
+  .metric .d.bad{ color:var(--alps) }
+  .kc-item + .kc-item{ margin-top:22px; padding-top:22px; border-top:1px solid var(--hair) }
+  .arch-note{ font-size:11.5px; color:var(--ink-2); margin:10px 0 0; line-height:1.5 }
+  .arch-note .flag{ color:var(--alps); font-weight:600 }
+  @media(max-width:560px){ canvas{ min-height:300px } }
+</style>
+</head>
+<body>
+<main class="sim">
+
+  <div class="sim-head-row">
+    <div>
+      <div class="sim-eyebrow">Domain 5 · Interactive Simulation</div>
+      <h1 class="sim-title">Reliability Controls for an Operations Pipeline</h1>
+    </div>
+    <button class="btn btn--ghost help-btn" id="helpBtn" aria-haspopup="dialog">? Help</button>
+  </div>
+  <p class="sim-deck">A multi-agent operations pipeline triages incidents: a coordinator delegates to subagents,
+    then aggregates. Configure the reliability controls — ambiguity policy, subagent error handling, flaky-subagent
+    recovery, confidence gating, provenance, and large-exploration context handling — then watch end-to-end
+    reliability, silent-failure and mis-identification rates, human-review load, unattributed-claim count, retry
+    load, and context-window pressure respond to each decision.</p>
+
+  <div class="tabs" role="tablist" aria-label="Simulator sections">
+    <button class="tab" role="tab" id="t-sim"  aria-controls="p-sim"  aria-selected="true">Simulate</button>
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="false">Architecture</button>
+    <button class="tab" role="tab" id="t-kc"   aria-controls="p-kc"   aria-selected="false">Knowledge Check</button>
+  </div>
+
+  <!-- ── Simulate ──────────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-sim" role="tabpanel" aria-labelledby="t-sim">
+    <div class="cols cols-2">
+      <div class="panel">
+        <p class="panel-label">Pipeline configuration</p>
+
+        <div class="seg-field">
+          <p class="panel-label" id="lblAmb">Ambiguity policy</p>
+          <div class="seg" id="segAmb" role="group" aria-labelledby="lblAmb">
+            <button type="button" data-v="ask" aria-pressed="false">Ask one clarifying question</button>
+            <button type="button" data-v="guess" aria-pressed="true">Guess via heuristic</button>
+            <button type="button" data-v="escalate" aria-pressed="false">Always escalate</button>
+          </div>
+          <span class="hint">When a customer/incident lookup returns multiple matches, ask for a disambiguating
+            identifier. Guessing by heuristic (most-recent activity) mis-identifies; always escalating wastes
+            human time on cases the agent could resolve.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label" id="lblErr">Subagent error handling</p>
+          <div class="seg" id="segErr" role="group" aria-labelledby="lblErr">
+            <button type="button" data-v="surface" aria-pressed="false">Surface structured error context</button>
+            <button type="button" data-v="swallow" aria-pressed="true">Swallow &amp; return [] as success</button>
+          </div>
+          <span class="hint">A subagent times out. Return structured context (failureType, attemptedQuery,
+            partialResults) so the coordinator can recover — or swallow it and return an empty array, which the
+            coordinator mistakes for "no results found."</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label" id="lblRetry">Subagent recovery on flaky failures</p>
+          <div class="seg" id="segRetry" role="group" aria-labelledby="lblRetry">
+            <button type="button" data-v="backoff" aria-pressed="false">Bounded backoff + circuit breaker</button>
+            <button type="button" data-v="storm" aria-pressed="true">Unbounded immediate retries</button>
+            <button type="button" data-v="none" aria-pressed="false">No retry at all</button>
+          </div>
+          <span class="hint">A subagent is intermittently flaky. Retry with bounded exponential backoff and a circuit
+            breaker that escalates after N consecutive failures — or hammer it with unbounded immediate retries
+            (a retry storm that floods the dependency and spikes latency), or never retry (transient blips become
+            hard failures).</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label" id="lblConf">Confidence gating</p>
+          <div class="seg" id="segConf" role="group" aria-labelledby="lblConf">
+            <button type="button" data-v="calibrated" aria-pressed="false">Calibrated threshold → human review</button>
+            <button type="button" data-v="trust" aria-pressed="true">Trust uncalibrated high confidence</button>
+          </div>
+          <span class="hint">Route low-confidence outputs to human review using a threshold calibrated on a
+            labeled validation set — or trust the model's self-reported confidence, which is not reliably
+            calibrated and can be confidently wrong.</span>
+        </div>
+
+        <label class="toggle" style="margin:4px 0 4px">
+          <input type="checkbox" id="cfgProv">
+          <span class="track"></span>
+          <span>Provenance / citation tracking on</span>
+        </label>
+        <span class="hint" style="display:block; margin-bottom:6px">Subagents emit claim→source mappings (source,
+          excerpt, date) that the aggregator preserves per claim. Off → synthesis ships unattributed,
+          unverifiable claims.</span>
+
+        <label class="toggle" style="margin:4px 0 4px">
+          <input type="checkbox" id="cfgScratch">
+          <span class="track"></span>
+          <span>Delegate large exploration to a subagent + scratchpad</span>
+        </label>
+        <span class="hint" style="display:block; margin-bottom:6px">A large exploration step (trace dependencies
+          across the codebase) goes to a subagent that writes findings to a scratchpad file and returns a concise
+          summary. Off → all raw exploration is crammed into the coordinator's context, blowing the window and
+          degrading reliability as the model reasons from compressed context.</span>
+
+        <div class="run-row">
+          <button class="btn btn--primary" id="runBtn">▶ Run 1,000 incidents</button>
+          <button class="btn btn--ghost" id="resetBtn">↺ Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-label">Outcome</p>
+        <div class="metrics" id="metrics">
+          <div class="metric"><div class="v tnum" id="mRel">—</div><div class="k">E2E reliability</div></div>
+          <div class="metric"><div class="v tnum" id="mSilent">—</div><div class="k">Silent-failure rate</div></div>
+          <div class="metric"><div class="v tnum" id="mMisID">—</div><div class="k">Mis-identification rate</div></div>
+          <div class="metric"><div class="v tnum" id="mReview">—</div><div class="k">Human-review rate</div></div>
+          <div class="metric"><div class="v tnum" id="mUnattr">—</div><div class="k">Unattributed claims</div></div>
+          <div class="metric"><div class="v tnum" id="mRetry">—</div><div class="k">Retry load (× baseline)</div></div>
+          <div class="metric"><div class="v tnum" id="mCtx">—</div><div class="k">Context-window pressure</div></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="meter" id="relMeter"><i></i></div>
+          <div class="metric" style="padding:6px 0 0"><div class="k">End-to-end reliability</div></div>
+        </div>
+        <div class="verdict" id="verdict" hidden></div>
+        <div class="log" id="log" style="margin-top:12px" role="log" aria-live="polite" aria-label="Consequence log"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+    <div class="panel arch-wrap">
+      <p class="panel-label">Multi-agent error propagation</p>
+      <canvas id="arch" width="820" height="380" aria-label="Diagram: a coordinator delegates to a triage subagent, a lookup subagent, and a remediation subagent, which feed an aggregator and a human review gate. The lookup subagent's edge to the aggregator is flagged in red as a swallowed error that returns an empty array as success."></canvas>
+      <p class="arch-note">A subagent failure must travel back to the coordinator as <em>structured error
+        context</em>, not as an empty result. The <span class="flag">red edge</span> is the silent-failure
+        anti-pattern: the lookup subagent timed out but returned <code>[]</code> with no error flag, so the
+        aggregator treats it as "no matches" and ships an incomplete result.</p>
+    </div>
+  </section>
+
+  <!-- ── Knowledge Check ───────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-kc" role="tabpanel" aria-labelledby="t-kc" hidden>
+    <div class="panel" id="kcHost"></div>
+  </section>
+
+</main>
+
+<!-- ── Help overlay ────────────────────────────────────────────────────── -->
+<div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <h2 id="helpTitle">How this simulation works</h2>
+    <ol>
+      <li>Set the four <strong>reliability controls</strong> on the left.</li>
+      <li>Press <strong>Run</strong> and watch the metrics respond.</li>
+      <li>Metrics turn <strong>red</strong> when a control crosses a danger threshold — silent failures,
+        mis-identifications, bad outputs shipped, or unverifiable claims.</li>
+      <li>Find the config that maximizes reliability without needlessly inflating the human-review rate.</li>
+    </ol>
+    <button class="btn btn--primary" id="helpClose">Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function selectTab(tab){
+    tabs.forEach(function(t){
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if(tab.id === 't-arch') drawArch();
+  }
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){ selectTab(t); });
+    t.addEventListener('keydown', function(e){
+      var i = tabs.indexOf(t), n = tabs.length;
+      if(e.key === 'ArrowRight'){ e.preventDefault(); var a=tabs[(i+1)%n]; selectTab(a); a.focus(); }
+      if(e.key === 'ArrowLeft'){ e.preventDefault(); var b=tabs[(i-1+n)%n]; selectTab(b); b.focus(); }
+    });
+  });
+
+  // ── Help ───────────────────────────────────────────────────────────────
+  var help = document.getElementById('help');
+  document.getElementById('helpBtn').addEventListener('click', function(){ help.hidden = false; document.getElementById('helpClose').focus(); });
+  document.getElementById('helpClose').addEventListener('click', function(){ help.hidden = true; });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') help.hidden = true; });
+
+  // ── Segmented controls (mutually-exclusive) ────────────────────────────
+  var seg = {};
+  ['segAmb','segErr','segRetry','segConf'].forEach(function(id){
+    var grp = document.getElementById(id);
+    var btns = Array.prototype.slice.call(grp.querySelectorAll('button'));
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        btns.forEach(function(o){ o.setAttribute('aria-pressed', o===b ? 'true':'false'); });
+        seg[id] = b.getAttribute('data-v');
+      });
+    });
+    seg[id] = grp.querySelector('[aria-pressed="true"]').getAttribute('data-v');
+  });
+
+  // ── Log helper ─────────────────────────────────────────────────────────
+  var logEl = document.getElementById('log'), step = 0;
+  function log(msg, cls){
+    var d = document.createElement('div');
+    d.className = 'log-line' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<span class="t">' + String(++step).padStart(2,'0') + '</span>  ' + msg;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function clamp(x){ return Math.max(0, Math.min(1, x)); }
+  function pct(x){ return Math.round(x*100) + '%'; }
+
+  // ── Model: config → deterministic metrics (the teaching core) ──────────
+  function run(){
+    logEl.innerHTML=''; step=0;
+    var amb = seg.segAmb, err = seg.segErr, retry = seg.segRetry, conf = seg.segConf,
+        prov = document.getElementById('cfgProv').checked,
+        scratch = document.getElementById('cfgScratch').checked;
+
+    var rel    = 0.97;   // end-to-end reliability
+    var silent = 0.00;   // silent-failure rate (red)
+    var misID  = 0.01;   // mis-identification rate (red)
+    var review = 0.08;   // human-review rate (calibrated baseline)
+    var unattr = 0;      // unattributed-claim count (per 1,000 incidents)
+    var retryLoad = 1;   // retry load as a multiple of baseline request volume
+    var ctx    = 0.30;   // context-window pressure (fraction of window in use)
+
+    log('Coordinator delegates triage, lookup and remediation to subagents.', 'step');
+
+    // (a) ambiguity policy
+    if(amb === 'ask'){
+      log('Lookup returns multiple matches → agent asks for a disambiguating identifier.', 'step');
+    } else if(amb === 'guess'){
+      misID += 0.21; rel -= 0.14;
+      log('Heuristic picks the most-recently-active match → wrong customer/asset identified.', 'bad');
+    } else { // escalate
+      review += 0.24; rel -= 0.03;
+      log('Every ambiguous case escalated → needless escalation cost; humans handle cases the agent could resolve.', 'bad');
+    }
+
+    // (b) subagent error handling
+    if(err === 'surface'){
+      log('Subagent timeout returns structured error context (failureType, attemptedQuery, partialResults).', 'step');
+    } else { // swallow
+      silent += 0.18; rel -= 0.22;
+      log('Subagent timeout swallowed → returns [] as success; aggregator treats it as "no results found".', 'bad');
+    }
+
+    // (b2) subagent recovery on flaky failures (5.3 recovery)
+    if(retry === 'backoff'){
+      log('Flaky subagent retried with bounded exponential backoff; circuit breaker escalates after N failures.', 'step');
+    } else if(retry === 'storm'){
+      retryLoad += 11; rel -= 0.12;
+      log('Unbounded immediate retries → retry storm floods the dependency, spikes latency, and worsens the outage.', 'bad');
+    } else { // none
+      rel -= 0.08; silent += 0.04;
+      log('No retry → transient blips become hard failures; recoverable steps are abandoned.', 'bad');
+    }
+
+    // (c) confidence gating
+    if(conf === 'calibrated'){
+      log('Low-confidence outputs routed to human review via a threshold calibrated on labeled data.', 'step');
+    } else { // trust
+      rel -= 0.16;
+      review = Math.max(0, review - 0.08);
+      log('Uncalibrated self-reported confidence trusted → bad outputs shipped; the model is confidently wrong.', 'bad');
+    }
+
+    // (d) provenance / citation tracking
+    if(prov){
+      log('Provenance on: claim→source mappings (source, excerpt, date) preserved through aggregation.', 'step');
+    } else {
+      unattr += 240; rel -= 0.05;
+      log('Provenance off → aggregator emits unattributed, unverifiable claims; reviewers cannot trace sources.', 'bad');
+    }
+
+    // (e) large-exploration context handling (5.4)
+    if(scratch){
+      log('Large exploration delegated to a subagent that writes findings to a scratchpad and returns a summary.', 'step');
+    } else {
+      ctx += 0.55; rel -= 0.09;
+      log('Raw exploration crammed into the coordinator → context-window blowout; model reasons from compressed context.', 'bad');
+    }
+
+    rel = clamp(rel); silent = clamp(silent); misID = clamp(misID); review = clamp(review); ctx = clamp(ctx);
+
+    set('mRel',    pct(rel),    rel < 0.85);
+    set('mSilent', pct(silent), silent > 0.00);
+    set('mMisID',  pct(misID),  misID > 0.05);
+    set('mReview', pct(review), false);              // not a danger metric — never reddens
+    set('mUnattr', unattr,      unattr > 0);
+    set('mRetry',  retryLoad + '×', retryLoad > 1);
+    set('mCtx',    pct(ctx),    ctx > 0.80);
+    meter('relMeter', rel, rel < 0.85);
+
+    // human-review note: flag over-review separately (cost, not danger → ink, not red)
+    var reviewNote = review > 0.25 ? 'over-reviewing — escalation cost is high' : 'within budget';
+    log('Human-review rate: ' + pct(review) + ' (' + reviewNote + ').', 'step');
+
+    // verdict
+    var problems = [];
+    if(amb === 'guess') problems.push('mis-identification from heuristic guessing');
+    if(amb === 'escalate') problems.push('needless escalation cost');
+    if(err === 'swallow') problems.push('silent failures from swallowed errors');
+    if(retry === 'storm') problems.push('retry storm from unbounded immediate retries');
+    if(retry === 'none') problems.push('hard failures from no retry on transient blips');
+    if(conf === 'trust') problems.push('bad outputs shipped on uncalibrated confidence');
+    if(!prov) problems.push('unverifiable, unattributed claims');
+    if(!scratch) problems.push('context-window blowout from un-delegated exploration');
+
+    var v = document.getElementById('verdict');
+    var danger = (silent > 0) || (misID > 0.05) || (unattr > 0) || (rel < 0.85) || (retryLoad > 1) || (ctx > 0.80);
+    v.hidden = false;
+    v.classList.toggle('is-bad', danger);
+    if(problems.length === 0){
+      v.innerHTML = '<strong>Reliable.</strong> Ambiguity resolved by asking, errors surfaced as structured ' +
+        'context, flaky subagents recovered with bounded backoff and a circuit breaker, confidence calibrated ' +
+        'against labeled data, provenance preserved end to end, and large exploration delegated to a ' +
+        'subagent + scratchpad.';
+    } else {
+      v.innerHTML = '<strong>Reliability degraded:</strong> ' + problems.join('; ') + '.';
+    }
+    log('Run complete over 1,000 incidents.', 'step');
+    drawArch();   // reflect the current config in the Architecture diagram
+  }
+
+  function set(id, val, bad){ var el=document.getElementById(id); el.textContent=val; el.classList.toggle('is-bad', !!bad); }
+  function meter(id, frac, bad){ var m=document.getElementById(id); m.classList.toggle('is-bad', !!bad); m.firstElementChild.style.width=Math.min(100,frac*100)+'%'; }
+  function reset(){
+    logEl.innerHTML=''; step=0;
+    ['mRel','mSilent','mMisID','mReview','mUnattr','mRetry','mCtx'].forEach(function(i){ set(i,'—',false); });
+    meter('relMeter',0,false);
+    var v=document.getElementById('verdict'); v.hidden=true; v.classList.remove('is-bad'); v.innerHTML='';
+    drawArch();   // reflect the current config in the Architecture diagram
+  }
+
+  document.getElementById('runBtn').addEventListener('click', run);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  // ── Canvas diagram (hairline ink on paper; #ed1c24 only to flag failure) ─
+  // Reads the CURRENT config (same values run() uses) and flags each
+  // anti-pattern element red ONLY when active; ink when fixed.
+  function drawArch(){
+    var c = document.getElementById('arch'), x = c.getContext('2d');
+    // Use the canvas's intrinsic width/height so it renders correctly even
+    // while the Architecture pane is hidden (no layout box).
+    var W = c.width, H = c.height;
+    var ALPS = '#ed1c24', INK = '#000';
+
+    // Current config — same sources run() reads.
+    var amb  = seg.segAmb;
+    var err  = seg.segErr;
+    var retry = seg.segRetry;
+    var conf = seg.segConf;
+    var prov = document.getElementById('cfgProv').checked;
+    var scratch = document.getElementById('cfgScratch').checked;
+
+    // Active anti-patterns → red.
+    var swallowOn = (err  === 'swallow');     // subagent→aggregator [] as "success"
+    var misIDOn   = (amb  === 'guess');       // heuristic mis-identification
+    var trustOn   = (conf === 'trust');       // uncalibrated confidence trusted
+    var unattrOn  = (!prov);                  // unattributed claims
+    var stormOn   = (retry === 'storm');      // unbounded retry storm
+    var noRetryOn = (retry === 'none');       // no retry on transient blips
+    var retryBad  = stormOn || noRetryOn;     // retry edge anti-pattern active
+    var ctxOn     = (!scratch);               // exploration crammed → context blowout
+
+    x.clearRect(0,0,W,H);
+    x.lineWidth = 1.5;
+    x.font = '13px "FDJR Text", system-ui, sans-serif';
+    x.textBaseline = 'middle';
+
+    function box(bx,by,bw,bh,label,sub,flag){
+      x.strokeStyle = flag ? ALPS : INK; x.fillStyle = '#fbfaf6';
+      x.fillRect(bx,by,bw,bh); x.strokeRect(bx,by,bw,bh);
+      x.fillStyle = flag ? ALPS : INK;
+      x.fillText(label, bx+12, sub ? by+22 : by+bh/2);
+      if(sub){ x.fillStyle = flag ? ALPS : '#6b675f'; x.font='11px "FDJR Text", system-ui, sans-serif';
+        x.fillText(sub, bx+12, by+40); x.font='13px "FDJR Text", system-ui, sans-serif'; }
+    }
+    function edge(x1,y1,x2,y2,red){
+      x.strokeStyle = red ? ALPS : INK;
+      x.fillStyle   = red ? ALPS : INK;
+      x.lineWidth = red ? 2 : 1.5;
+      x.beginPath(); x.moveTo(x1,y1); x.lineTo(x2,y2); x.stroke();
+      var a = Math.atan2(y2-y1, x2-x1);
+      x.beginPath();
+      x.moveTo(x2,y2);
+      x.lineTo(x2 - 9*Math.cos(a - 0.4), y2 - 9*Math.sin(a - 0.4));
+      x.lineTo(x2 - 9*Math.cos(a + 0.4), y2 - 9*Math.sin(a + 0.4));
+      x.closePath(); x.fill();
+      x.lineWidth = 1.5;
+    }
+
+    // Coordinator
+    box(30, 160, 150, 56, 'Coordinator', 'delegates + recovers', false);
+    // Subagents — lookup subagent reddens with the swallowed-error anti-pattern
+    box(290, 40,  170, 56, 'Triage subagent', 'classify incident', misIDOn);
+    box(290, 162, 170, 56, 'Lookup subagent', swallowOn ? 'returns [] on timeout' : 'surfaces error context', swallowOn);
+    box(290, 284, 170, 56, 'Remediation subagent', 'propose action', false);
+    // Aggregator — reddens when shipping unattributed claims
+    box(560, 100, 150, 56, 'Aggregator', unattrOn ? 'unattributed claims' : 'merge + cite claims', unattrOn);
+    // Human review / confidence gate — reddens when confidence is trusted uncalibrated
+    box(560, 224, 150, 56, 'Human review', trustOn ? 'gate bypassed' : 'confidence gate', trustOn);
+
+    // Coordinator → subagents (triage edge reddens on mis-identification)
+    edge(180, 178, 290, 68,  misIDOn);
+    edge(180, 188, 290, 190, false);
+    edge(180, 198, 290, 312, false);
+
+    // Subagents → aggregator (lookup edge flagged red = swallowed error)
+    edge(460, 68,  560, 120, false);
+    edge(460, 190, 560, 138, swallowOn);    // SWALLOWED ERROR → [] as "success"
+    edge(460, 312, 560, 150, false);
+
+    // Aggregator → human review gate (reddens when confidence gate bypassed)
+    edge(635, 156, 635, 224, trustOn);
+
+    // Circuit-breaker / retry return edge: lookup subagent → coordinator.
+    // Reddens for either retry anti-pattern (storm or no-retry).
+    (function(){
+      x.strokeStyle = retryBad ? ALPS : INK;
+      x.fillStyle   = retryBad ? ALPS : INK;
+      x.lineWidth   = retryBad ? 2 : 1.5;
+      x.beginPath();
+      x.moveTo(295, 210);
+      x.bezierCurveTo(220, 250, 150, 250, 120, 220);   // arc back under the coordinator
+      x.stroke();
+      // arrowhead into the coordinator's lower edge
+      x.beginPath();
+      x.moveTo(120, 220);
+      x.lineTo(126, 230);
+      x.lineTo(114, 230);
+      x.closePath(); x.fill();
+      x.lineWidth = 1.5;
+      x.font = '10px "FDJR Text", system-ui, sans-serif';
+      x.fillStyle = retryBad ? ALPS : '#6b675f';
+      var rlbl = stormOn ? 'retry storm' : (noRetryOn ? 'no retry' : 'backoff + breaker');
+      x.fillText('↻ ' + rlbl, 158, 248);
+      x.font = '13px "FDJR Text", system-ui, sans-serif';
+    })();
+
+    // Subagent + scratchpad node for large exploration (5.4).
+    // Reddens when exploration is crammed into the coordinator (context blowout).
+    box(30, 40, 200, 70, ctxOn ? 'Exploration in coordinator' : 'Explore subagent', ctxOn ? 'context-window blowout' : 'writes scratchpad, returns summary', ctxOn);
+    // scratchpad file glyph beside the node when delegation is on
+    if(!ctxOn){
+      x.strokeStyle = INK; x.fillStyle = '#fbfaf6'; x.lineWidth = 1.5;
+      x.fillRect(238, 56, 30, 38); x.strokeRect(238, 56, 30, 38);
+      x.strokeStyle = '#6b675f';
+      x.beginPath();
+      x.moveTo(244, 66); x.lineTo(262, 66);
+      x.moveTo(244, 74); x.lineTo(262, 74);
+      x.moveTo(244, 82); x.lineTo(258, 82);
+      x.stroke();
+    }
+    // edge: exploration node → coordinator (feeds high-level context)
+    edge(130, 110, 105, 160, ctxOn);
+
+    // Active anti-pattern labels (Alps red), stacked from the bottom up
+    x.font = '11px "FDJR Text", system-ui, sans-serif';
+    x.fillStyle = ALPS;
+    var ly = 376;
+    function flagLabel(t){ x.fillText('● ' + t, 20, ly); ly -= 16; }
+    if(ctxOn)     flagLabel('exploration crammed into coordinator → context-window blowout');
+    if(stormOn)   flagLabel('unbounded immediate retries → retry storm');
+    if(noRetryOn) flagLabel('no retry → transient blips become hard failures');
+    if(unattrOn)  flagLabel('provenance off → unattributed, unverifiable claims');
+    if(trustOn)   flagLabel('uncalibrated confidence trusted → bad outputs shipped');
+    if(misIDOn)   flagLabel('ambiguity guessed by heuristic → mis-identification');
+    if(swallowOn) flagLabel('swallowed error → [] as "success"');
+    if(!swallowOn && !misIDOn && !trustOn && !unattrOn && !retryBad && !ctxOn){
+      x.fillStyle = '#6b675f';
+      x.fillText('All controls fixed — error context surfaced, identity verified, confidence gated, provenance preserved.', 20, 376);
+    }
+    x.font = '13px "FDJR Text", system-ui, sans-serif';
+  }
+
+  // ── Knowledge check (6 questions) ──────────────────────────────────────
+  var KC = [
+    {
+      q: 'A lookup subagent returns "{ result: [] }" with no error flag after a timeout. Why is this an anti-pattern?',
+      options: [
+        'The coordinator cannot distinguish a true access failure (retryable) from a valid empty result, so it proceeds on incomplete data.',
+        'Empty arrays are slower to serialize than structured errors, adding latency to the pipeline.',
+        'The coordinator will always retry on an empty array, creating an infinite loop of duplicate lookups that never terminates cleanly.',
+        'Returning [] forces the entire workflow to terminate on the single subagent failure.'
+      ],
+      correct: 0,
+      explain: 'An empty result with no error flag is ambiguous between "service was down (retry)" and "ran fine, found nothing" — the coordinator should receive structured error context instead.'
+    },
+    {
+      q: 'A customer lookup returns multiple matches. What should the operations agent do?',
+      options: [
+        'Select the most-recently-active match, since it is statistically the likeliest intended record.',
+        'Ask the customer for an additional disambiguating identifier rather than choosing by heuristic.',
+        'Escalate every multi-match case to a human regardless of how simple it is.',
+        'Pick the highest-value account, since errors there are the most costly to get wrong.'
+      ],
+      correct: 1,
+      explain: 'Multiple matches require requesting a disambiguating identifier; heuristic selection (most-recent, highest-value) causes mis-identification.'
+    },
+    {
+      q: 'An extraction step reaches 97% overall accuracy. Before automating its high-confidence outputs and reducing human review, what is most critical?',
+      options: [
+        'Confirm the model self-reports calibrated confidence above 90% on every high-confidence category before automating its outputs.',
+        'Re-run on a larger sample to confirm the 97% figure holds at scale.',
+        'Segment accuracy by document type and field — the 97% average can mask 60% on a segment.',
+        'Verify the 3% error rate is within the business threshold and proceed.'
+      ],
+      correct: 2,
+      explain: 'Aggregate accuracy can hide segment-level failures; calibration and review thresholds must be validated by document type and field, not by self-reported confidence.'
+    },
+    {
+      q: 'A synthesis agent must produce a cited report but its subagents passed claims with no source attribution. What is the root architectural fix?',
+      options: [
+        'Have the synthesis agent generate citations from its own training knowledge.',
+        'Give the synthesis agent a retrieval tool so it can look up and re-derive a supporting source for each finished claim after aggregation.',
+        'Require subagents to emit claim→source mappings the synthesis agent preserves through aggregation.',
+        'Append one combined bibliography of every source any subagent touched.'
+      ],
+      correct: 2,
+      explain: 'Provenance is preserved by requiring subagents to output claim→source mappings (source, excerpt, date) that survive synthesis — not by re-deriving or hallucinating citations afterward.'
+    },
+    {
+      q: 'A subagent that calls a flaky external dependency fails intermittently. What is the most reliable recovery strategy?',
+      options: [
+        'Retry immediately and without limit until the call eventually succeeds, since the dependency is only intermittently down.',
+        'Never retry; propagate every failure up to the coordinator so a human always makes the recovery decision.',
+        'Bounded exponential backoff, with a circuit breaker that stops retrying and escalates after N consecutive failures.',
+        'Retry on a fixed tight interval forever, which keeps pressure on the dependency until it recovers and the call goes through.'
+      ],
+      correct: 2,
+      explain: 'Bounded backoff spaces out retries so a transient blip can clear without flooding the dependency, and a circuit breaker caps the damage by escalating after N failures instead of retrying forever (a retry storm).'
+    },
+    {
+      q: 'A coordinator must trace dependencies across a large codebase — a verbose, high-volume exploration. How should it handle the output to stay reliable?',
+      options: [
+        'Read every file into the coordinator context so all raw details remain directly available for the rest of the session.',
+        'Delegate to a subagent that writes findings to a scratchpad file and returns a concise summary.',
+        'Keep all the raw exploration in context but ask the model to mentally compress it when answering later questions about the codebase.',
+        'Stream the full file contents into the coordinator continuously so nothing discovered during exploration is ever lost.'
+      ],
+      correct: 1,
+      explain: 'Delegating to a subagent isolates verbose output; the scratchpad persists findings across context boundaries and the summary keeps the coordinator context small, avoiding the window blowout that degrades reliability.'
+    }
+  ];
+
+  function renderKC(){
+    var host = document.getElementById('kcHost'); host.innerHTML='';
+    KC.forEach(function(item, qi){
+      var wrap = document.createElement('div'); wrap.className = 'kc-item';
+      var q = document.createElement('p'); q.className='kc-q';
+      q.textContent = (qi+1) + '. ' + item.q; wrap.appendChild(q);
+      var group = document.createElement('div');
+      group.setAttribute('role','group');
+      group.setAttribute('aria-label','Question ' + (qi+1) + ' options');
+      item.options.forEach(function(opt,i){
+        var b=document.createElement('button'); b.className='kc-opt'; b.type='button'; b.textContent=opt;
+        b.addEventListener('click', function(){
+          Array.prototype.forEach.call(group.querySelectorAll('.kc-opt'), function(o,j){
+            o.disabled=true; o.dataset.state = j===item.correct ? 'correct' : (j===i ? 'wrong' : 'muted');
+          });
+          if(!wrap.querySelector('.kc-exp')){
+            var e=document.createElement('div'); e.className='kc-exp';
+            e.textContent = (i===item.correct ? 'Correct. ' : 'Not quite. ') + item.explain;
+            wrap.appendChild(e);
+          }
+        });
+        group.appendChild(b);
+      });
+      wrap.appendChild(group);
+      host.appendChild(wrap);
+    });
+  }
+
+  // ── Reduced-motion guard ───────────────────────────────────────────────
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    var meters = document.querySelectorAll('.meter > i');
+    Array.prototype.forEach.call(meters, function(m){ m.style.transition = 'none'; });
+  }
+
+  // init
+  reset(); renderKC();
+})();
+</script>
+</body>
+</html>

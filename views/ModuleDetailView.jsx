@@ -4,11 +4,10 @@ import { useState } from 'react';
 import { getTaskStatement, getDomainForTask } from '@/models/modules';
 import { SCENARIOS } from '@/models/scenarios';
 import { getScenarioQuestionsForTask } from '@/models/scenarioMapping';
-import { getCaseStudyForDomain } from '@/models/caseStudies';
+import { getSimulationsForDomain, simulationUrl } from '@/models/simulations';
 import { useProgress } from '@/controllers/ProgressContext';
-import CaseStudyView from '@/views/CaseStudyView';
 
-const TABS = ['Study', 'Gotchas', 'Quiz', 'Case Study'];
+const TABS = ['Study', 'Gotchas', 'Quiz', 'Simulations'];
 
 const S = {
   root: { maxWidth: 840, margin: '0 auto' },
@@ -196,7 +195,176 @@ const S = {
     color: 'var(--color-text-secondary)',
     borderLeft: '2px solid var(--carbon)',
   },
+  // ── Simulations tab ──────────────────────────────────────────────────────
+  simIntro: {
+    fontSize: 13,
+    color: 'var(--color-text-secondary)',
+    margin: '0 0 1.5rem',
+    lineHeight: 1.6,
+  },
+  simList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+  },
+  simCard: {
+    display: 'block',
+    width: '100%',
+    textAlign: 'left',
+    padding: '1.1rem 1.25rem',
+    background: 'var(--color-background-primary)',
+    border: '1px solid var(--color-border-tertiary)',
+    borderRadius: 'var(--radius-md)',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-text)',
+    transition: 'border-color 0.12s, background 0.12s',
+  },
+  simCardHead: {
+    display: 'flex',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 6,
+  },
+  simCardTitle: {
+    fontFamily: 'var(--font-deck)',
+    fontSize: 16,
+    fontWeight: 700,
+    letterSpacing: '-0.01em',
+    color: 'var(--color-text-primary)',
+  },
+  simCardMeta: {
+    flexShrink: 0,
+    fontSize: 11,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    color: 'var(--color-text-secondary)',
+    whiteSpace: 'nowrap',
+  },
+  simCardTeaser: {
+    fontSize: 13.5,
+    lineHeight: 1.6,
+    color: 'var(--color-text-secondary)',
+    margin: 0,
+  },
+  simBack: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 13,
+    color: 'var(--color-text-secondary)',
+    cursor: 'pointer',
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    fontFamily: 'var(--font-text)',
+  },
+  simPlayerBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: '1rem',
+  },
+  simOpenLink: {
+    fontSize: 12,
+    fontWeight: 600,
+    letterSpacing: '0.04em',
+    color: 'var(--color-text-secondary)',
+    textDecoration: 'none',
+    whiteSpace: 'nowrap',
+  },
+  simFrameWrap: {
+    border: '1px solid var(--color-border-tertiary)',
+    borderRadius: 'var(--radius-md)',
+    overflow: 'hidden',
+    background: 'var(--intelligence)',
+    boxShadow: 'var(--shadow-card)',
+  },
+  simFrame: {
+    display: 'block',
+    width: '100%',
+    height: 'min(78vh, 760px)',
+    border: 'none',
+  },
 };
+
+function SimulationsTab({ domain }) {
+  const sims = getSimulationsForDomain(domain.id);
+  const [activeId, setActiveId] = useState(null);
+
+  if (!sims.length) {
+    return (
+      <p style={{ fontSize: 14, color: 'var(--color-text-secondary)' }}>
+        No simulations are available for this domain yet.
+      </p>
+    );
+  }
+
+  const active = sims.find((s) => s.id === activeId);
+
+  if (active) {
+    const url = simulationUrl(active);
+    return (
+      <div>
+        <div style={S.simPlayerBar}>
+          <button style={S.simBack} onClick={() => setActiveId(null)}>
+            ← All Domain {domain.id} simulations
+          </button>
+          <a href={url} target="_blank" rel="noopener noreferrer" style={S.simOpenLink}>
+            Open full screen ↗
+          </a>
+        </div>
+        <div style={S.simFrameWrap}>
+          {/* sandbox: scripts only — no same-origin/storage, the sims use neither */}
+          <iframe
+            key={active.id}
+            src={url}
+            title={active.title}
+            sandbox="allow-scripts"
+            style={S.simFrame}
+            loading="lazy"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p style={S.simIntro}>
+        Interactive simulations for <strong>Domain {domain.id}: {domain.title}</strong>. Each puts
+        you in the architect's seat — configure the system, run it, and watch the metrics respond.
+        The gotchas and decision boundaries are <em>felt</em>: a wrong call visibly degrades the
+        outcome.
+      </p>
+      <div style={S.simList}>
+        {sims.map((sim) => (
+          <button
+            key={sim.id}
+            style={S.simCard}
+            onClick={() => setActiveId(sim.id)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--carbon)';
+              e.currentTarget.style.background = 'var(--color-background-secondary)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-border-tertiary)';
+              e.currentTarget.style.background = 'var(--color-background-primary)';
+            }}
+          >
+            <span style={S.simCardHead}>
+              <span style={S.simCardTitle}>{sim.title}</span>
+              <span style={S.simCardMeta}>Interactive ↗</span>
+            </span>
+            <p style={S.simCardTeaser}>{sim.summary}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StudyTab({ taskStatement }) {
   return (
@@ -385,7 +553,6 @@ export default function ModuleDetailView({ taskId, onBack }) {
   }
 
   const { domain, taskStatement } = result;
-  const caseStudy = getCaseStudyForDomain(domain.id);
 
   return (
     <div style={S.root}>
@@ -413,17 +580,7 @@ export default function ModuleDetailView({ taskId, onBack }) {
       {activeTab === 'Study' && <StudyTab taskStatement={taskStatement} />}
       {activeTab === 'Gotchas' && <GotchasTab taskStatement={taskStatement} />}
       {activeTab === 'Quiz' && <QuizTab taskStatement={taskStatement} />}
-      {activeTab === 'Case Study' && (
-        <div>
-          {caseStudy && (
-            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '0 0 1.5rem', lineHeight: 1.6 }}>
-              <strong style={{ color: 'var(--color-text-primary)' }}>{caseStudy.title}</strong>
-              {' '}— a Domain {domain.id} decision scenario. Work through each call the way you would on the job; the concepts span this whole domain.
-            </p>
-          )}
-          <CaseStudyView caseStudy={caseStudy} />
-        </div>
-      )}
+      {activeTab === 'Simulations' && <SimulationsTab domain={domain} />}
     </div>
   );
 }

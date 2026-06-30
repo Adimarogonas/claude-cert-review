@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuring Claude Code for a Team — CarbonSilicon</title>
+<link rel="stylesheet" href="/simulations/csl-sim.css">
+<style>
+  /* sim-specific CSS only — everything brand-level comes from csl-sim.css */
+  .arch-wrap{ position:relative }
+  .run-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:4px }
+  .seg-field{ margin-bottom:16px }
+  .seg-field > .panel-label{ margin-bottom:7px }
+  .seg-field .hint{ display:block; font-size:11.5px; color:var(--ink-2); line-height:1.45; margin-top:7px }
+  .seg.full{ display:flex; width:100% }
+  .seg.full button{ flex:1 1 0; text-align:center }
+  .metrics{ grid-template-columns:1fr 1fr }
+  .metric .d{ min-height:1.4em }
+  .legend{ font-family:var(--mono); font-size:11px; color:var(--ink-2); margin-top:10px; line-height:1.7 }
+  .legend b{ color:var(--alps); font-weight:700 }
+  .verdict{ margin-top:12px; padding:.55rem .7rem; border:1px solid var(--hair-2); border-radius:var(--r-sm);
+    font-size:12.5px; line-height:1.5; background:var(--paper) }
+  .verdict.is-bad{ border-color:var(--alps); color:var(--carbon) }
+  .verdict.is-bad strong{ color:var(--alps) }
+  .verdict strong{ font-weight:700 }
+  .kc-exp.is-bad{ border-left-color:var(--alps) }
+  @media(max-width:560px){ .metrics{ grid-template-columns:1fr } }
+</style>
+</head>
+<body>
+<main class="sim">
+
+  <div class="sim-head-row">
+    <div>
+      <div class="sim-eyebrow">Domain 3 · Interactive Simulation</div>
+      <h1 class="sim-title">Configuring Claude Code for a Team</h1>
+    </div>
+    <button class="btn btn--ghost help-btn" id="helpBtn" aria-haspopup="dialog">? Help</button>
+  </div>
+  <p class="sim-deck">Set up a shared repo: choose where conventions live, how rules are scoped, how a slash command is shipped, whether risky changes are planned first, how an unfamiliar-domain feature is approached, and how a reusable capability is packaged. Each choice deterministically moves the metrics on the right.</p>
+
+  <div class="tabs" role="tablist" aria-label="Simulator sections">
+    <button class="tab" role="tab" id="t-sim"  aria-controls="p-sim"  aria-selected="true">Simulate</button>
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="false">Architecture</button>
+    <button class="tab" role="tab" id="t-kc"   aria-controls="p-kc"   aria-selected="false">Knowledge Check</button>
+  </div>
+
+  <!-- ── Simulate ──────────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-sim" role="tabpanel" aria-labelledby="t-sim">
+    <div class="cols cols-2">
+      <div class="panel">
+        <p class="panel-label">Repository configuration</p>
+
+        <div class="seg-field">
+          <p class="panel-label">A · Where do team conventions live?</p>
+          <div class="seg full" role="group" aria-label="CLAUDE.md scope" id="segScope">
+            <button type="button" data-v="project" aria-pressed="false">project CLAUDE.md</button>
+            <button type="button" data-v="user" aria-pressed="true">~/.claude (personal)</button>
+          </div>
+          <span class="hint">Project-level CLAUDE.md is committed and loads for every contributor. <code>~/.claude/CLAUDE.md</code> is user-scoped and never reaches teammates.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label">B · How are the conventions organized?</p>
+          <div class="seg full" role="group" aria-label="Rule organization" id="segOrg">
+            <button type="button" data-v="rules" aria-pressed="false">path-scoped .claude/rules/</button>
+            <button type="button" data-v="mono" aria-pressed="true">one always-on root file</button>
+          </div>
+          <span class="hint">Path-scoped rules with <code>paths:</code> globs load only on matching files. A monolithic always-on file loads every rule on every edit.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label">C · How is the /review slash command shipped?</p>
+          <div class="seg full" role="group" aria-label="Command location" id="segCmd">
+            <button type="button" data-v="project" aria-pressed="false">.claude/commands/</button>
+            <button type="button" data-v="user" aria-pressed="true">~/.claude/commands/</button>
+            <button type="button" data-v="skill" aria-pressed="false">build a Skill</button>
+          </div>
+          <span class="hint">A committed <code>.claude/commands/review.md</code> is the right tool. User-scoped isn't shared; a full Skill is over-built for a fixed checklist.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label">D · The 45-file library migration is run…</p>
+          <div class="seg full" role="group" aria-label="Execution mode" id="segMode">
+            <button type="button" data-v="plan" aria-pressed="false">plan mode first</button>
+            <button type="button" data-v="direct" aria-pressed="true">direct execution</button>
+          </div>
+          <span class="hint">Plan mode explores the deprecated client's usage before touching files. Direct execution on a risky multi-file change ships unreviewed edits.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label">E · A cache layer in an unfamiliar domain is built by…</p>
+          <div class="seg full" role="group" aria-label="Refinement approach" id="segRefine">
+            <button type="button" data-v="interview" aria-pressed="false">interview &amp; refine in passes</button>
+            <button type="button" data-v="oneshot" aria-pressed="true">one vague one-shot prompt</button>
+          </div>
+          <span class="hint">The interview pattern lets Claude ask clarifying questions (invalidation, failure modes) and refine across passes. A single vague prompt loops unproductively and forces rework.</span>
+        </div>
+
+        <div class="seg-field">
+          <p class="panel-label">F · A reusable "summarize this PR" prompt is packaged as…</p>
+          <div class="seg full" role="group" aria-label="Capability packaging" id="segPkg">
+            <button type="button" data-v="command" aria-pressed="false">committed slash command</button>
+            <button type="button" data-v="skill" aria-pressed="true">an Agent Skill</button>
+          </div>
+          <span class="hint">A simple repeatable prompt fits a committed <code>.claude/commands/</code> slash command. Wrapping it in a full Skill (SKILL.md + bundled context) is over-built for a fixed prompt.</span>
+        </div>
+
+        <div class="run-row">
+          <button class="btn btn--primary" id="runBtn">&#9654; Run setup</button>
+          <button class="btn btn--ghost" id="resetBtn">&#8634; Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-label">Team outcome</p>
+        <div class="metrics" id="metrics">
+          <div class="metric"><div class="v tnum" id="mAdhere">&mdash;</div><div class="k">Convention adherence</div><div class="d" id="dAdhere"></div></div>
+          <div class="metric"><div class="v tnum" id="mProp">&mdash;</div><div class="k">Contributor propagation</div><div class="d" id="dProp"></div></div>
+          <div class="metric"><div class="v tnum" id="mRisk">&mdash;</div><div class="k">Risky unreviewed changes</div><div class="d" id="dRisk"></div></div>
+          <div class="metric"><div class="v tnum" id="mCtx">&mdash;</div><div class="k">Context token cost / edit</div><div class="d" id="dCtx"></div></div>
+          <div class="metric"><div class="v tnum" id="mRework">&mdash;</div><div class="k">Rework cycles</div><div class="d" id="dRework"></div></div>
+        </div>
+
+        <div style="margin-top:14px">
+          <div class="meter" id="ctxMeter"><i></i></div>
+          <div class="metric" style="padding:6px 0 0"><div class="k">Context bloat (relative to lean baseline)</div></div>
+        </div>
+
+        <div class="verdict" id="verdict" aria-live="polite">Press <strong>Run setup</strong> to evaluate the configuration.</div>
+
+        <div class="log" id="log" style="margin-top:12px" aria-live="polite" role="log" aria-label="Consequence log"></div>
+        <div class="legend">Healthy reads as ink &middot; <b>Alps Red flags failure / over-threshold</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+    <div class="panel arch-wrap">
+      <p class="panel-label">Claude Code config hierarchy &mdash; lowest to highest specificity</p>
+      <canvas id="arch" width="860" height="430" aria-label="Diagram of the Claude Code configuration hierarchy: user-level personal config does not propagate to the team and is flagged when relied on for shared conventions; project-level CLAUDE.md is committed and shared; path-scoped .claude/rules globs load conditionally; .claude/commands ship slash commands to all contributors."></canvas>
+      <p class="legend" style="margin-top:4px">Ink = shared / version-controlled config that reaches every contributor. <b>Alps Red = the personal-config-relied-on-for-team mistake</b> — it never propagates.</p>
+    </div>
+  </section>
+
+  <!-- ── Knowledge Check ───────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-kc" role="tabpanel" aria-labelledby="t-kc" hidden>
+    <div class="panel" id="kcHost"></div>
+  </section>
+
+</main>
+
+<!-- ── Help overlay ────────────────────────────────────────────────────── -->
+<div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <h2 id="helpTitle">How this simulation works</h2>
+    <ol>
+      <li>Make the six <strong>configuration</strong> choices (A&ndash;F) on the left.</li>
+      <li>Press <strong>Run setup</strong> and watch the team metrics respond.</li>
+      <li>Each choice writes a plain-English consequence to the log; <span style="color:var(--alps)">red lines</span> are the gotchas.</li>
+      <li>Find the setup that maximizes adherence and propagation while keeping risky unreviewed changes and context cost low.</li>
+    </ol>
+    <button class="btn btn--primary" id="helpClose">Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function selectTab(tab){
+    tabs.forEach(function(t){
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if(tab.id === 't-arch') drawArch();
+  }
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){ selectTab(t); });
+    t.addEventListener('keydown', function(e){
+      var i = tabs.indexOf(t), n = null;
+      if(e.key === 'ArrowRight'){ n = tabs[(i+1)%tabs.length]; }
+      else if(e.key === 'ArrowLeft'){ n = tabs[(i-1+tabs.length)%tabs.length]; }
+      if(n){ e.preventDefault(); selectTab(n); n.focus(); }
+    });
+  });
+
+  // ── Help ───────────────────────────────────────────────────────────────
+  var help = document.getElementById('help');
+  document.getElementById('helpBtn').addEventListener('click', function(){ help.hidden = false; document.getElementById('helpClose').focus(); });
+  document.getElementById('helpClose').addEventListener('click', function(){ help.hidden = true; });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') help.hidden = true; });
+
+  // ── Segmented controls (mutually-exclusive choice groups) ──────────────
+  var groups = {};
+  ['segScope','segOrg','segCmd','segMode','segRefine','segPkg'].forEach(function(gid){
+    var g = document.getElementById(gid);
+    var btns = Array.prototype.slice.call(g.querySelectorAll('button'));
+    groups[gid] = function(){ var on = g.querySelector('[aria-pressed="true"]'); return on ? on.getAttribute('data-v') : null; };
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        btns.forEach(function(o){ o.setAttribute('aria-pressed', o === b ? 'true':'false'); });
+      });
+    });
+  });
+
+  // ── Log helper ─────────────────────────────────────────────────────────
+  var logEl = document.getElementById('log'), step = 0;
+  function log(msg, cls){
+    var d = document.createElement('div');
+    d.className = 'log-line' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<span class="t">' + String(++step).padStart(2,'0') + '</span>  ' + msg;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function set(id, val, bad){ var el=document.getElementById(id); el.textContent=val; el.classList.toggle('is-bad', !!bad); }
+  function detail(id, txt){ document.getElementById(id).textContent = txt; }
+  function meter(id, frac, bad){ var m=document.getElementById(id); m.classList.toggle('is-bad', !!bad); m.firstElementChild.style.width=Math.min(100,Math.max(0,frac*100))+'%'; }
+
+  // ── Model: config → deterministic consequences (the teaching core) ─────
+  // Baselines for an otherwise-correct repo:
+  //   adherence 70 · propagation 100 · risky 4 · ctxTokens 900
+  function run(){
+    logEl.innerHTML=''; step=0;
+    var scope = groups.segScope(), org = groups.segOrg(), cmd = groups.segCmd(), mode = groups.segMode();
+    var refine = groups.segRefine(), pkg = groups.segPkg();
+
+    var adhere = 70, prop = 100, risk = 4, ctx = 900, rework = 1;  // ctx = tokens/edit, lean baseline ~900; rework = refinement passes
+
+    // A · CLAUDE.md scope → propagation + adherence
+    if(scope === 'project'){
+      adhere += 14;
+      log('Conventions in project CLAUDE.md — committed, auto-loaded for every contributor.', 'step');
+    } else {
+      prop = 20; adhere -= 22;
+      log('Conventions in ~/.claude/CLAUDE.md — user-scoped, NOT version-controlled. Teammates never receive them.', 'bad');
+    }
+
+    // B · Organization → context cost + adherence (misapplied rules)
+    if(org === 'rules'){
+      ctx -= 250; adhere += 8;
+      log('Rules split into path-scoped .claude/rules/ globs — only relevant rules load per edited file.', 'step');
+    } else {
+      ctx += 1600; adhere -= 10;
+      log('One always-on root file loads every rule on every edit — context bloat, and unrelated rules get misapplied.', 'bad');
+    }
+
+    // C · /review command shipping → propagation + adherence + a little ctx
+    if(cmd === 'project'){
+      adhere += 6;
+      log('/review shipped as .claude/commands/review.md — committed and available to all contributors.', 'step');
+    } else if(cmd === 'user'){
+      prop = Math.min(prop, 35);
+      log('/review placed in ~/.claude/commands/ — personal scope, the rest of the team has no /review.', 'bad');
+    } else {
+      ctx += 300; adhere -= 3;
+      log('A fixed checklist over-built as a Skill — needless SKILL.md/context overhead for what a command does.', 'bad');
+    }
+
+    // D · plan vs direct on the risky 45-file migration → risky-unreviewed rate
+    if(mode === 'plan'){
+      log('Plan mode first — deprecated-client usage mapped and the approach reviewed before any file is touched.', 'step');
+    } else {
+      risk = 58;
+      log('Direct execution on a 45-file migration — incompatibilities surface mid-run across files already edited unreviewed.', 'bad');
+    }
+
+    // E · interview/progressive-refinement vs vague one-shot → rework cycles + adherence
+    if(refine === 'interview'){
+      adhere += 4;
+      log('Interview pattern — Claude asks about invalidation and failure modes, then refines in passes. Hidden constraints surface up front.', 'step');
+    } else {
+      rework = 6; adhere -= 8;
+      log('One vague one-shot prompt in an unfamiliar domain — the loop never converges and the feature is reworked pass after pass.', 'bad');
+    }
+
+    // F · slash command vs over-built Skill for a simple repeatable prompt → token cost + rework
+    if(pkg === 'command'){
+      log('"Summarize this PR" shipped as a committed slash command — right-sized for a simple repeatable prompt.', 'step');
+    } else {
+      ctx += 250; rework += 2;
+      log('A fixed prompt over-built as an Agent Skill — SKILL.md and bundled context add overhead and maintenance the prompt never needed.', 'bad');
+    }
+
+    // Clamp + thresholds
+    adhere = Math.max(0, Math.min(100, adhere));
+    var ctxFrac = ctx / 2600;                 // bloat relative to ~lean baseline span
+    var ctxBad   = ctx > 1500;
+    var riskBad  = risk > 10;
+    var propBad  = prop < 80;
+    var adhereBad= adhere < 75;
+    var reworkBad= rework > 3;
+
+    set('mAdhere', adhere + '%', adhereBad); detail('dAdhere', adhereBad ? 'below team bar' : 'on standard');
+    set('mProp', prop + '%', propBad);       detail('dProp', propBad ? 'lost to user scope' : 'all contributors');
+    set('mRisk', risk + '%', riskBad);       detail('dRisk', riskBad ? 'edits shipped unreviewed' : 'reviewed before edit');
+    set('mCtx', ctx.toLocaleString(), ctxBad); detail('dCtx', ctxBad ? 'bloated / misapplied' : 'lean, path-scoped');
+    set('mRework', '×' + rework, reworkBad);  detail('dRework', reworkBad ? 'loops without converging' : 'converges quickly');
+    meter('ctxMeter', ctxFrac, ctxBad);
+
+    // Verdict
+    var ideal = scope==='project' && org==='rules' && cmd==='project' && mode==='plan' && refine==='interview' && pkg==='command';
+    var v = document.getElementById('verdict');
+    if(ideal){
+      v.className = 'verdict';
+      v.innerHTML = '<strong>Clean team setup.</strong> Shared conventions propagate, rules stay scoped, the command ships with the repo, and the risky migration is planned first.';
+    } else {
+      v.className = 'verdict is-bad';
+      var bads = [];
+      if(scope!=='project') bads.push('personal config relied on for shared conventions');
+      if(org!=='rules') bads.push('always-on monolithic rules');
+      if(cmd!=='project') bads.push(cmd==='user' ? 'personal-scoped /review' : 'over-built Skill');
+      if(mode!=='plan') bads.push('unreviewed direct execution');
+      if(refine!=='interview') bads.push('vague one-shot in an unfamiliar domain');
+      if(pkg!=='command') bads.push('over-built Skill for a simple prompt');
+      v.innerHTML = '<strong>Gotcha present:</strong> ' + bads.join('; ') + '. See the red lines above.';
+    }
+    log('Setup evaluated.', 'step');
+    drawArch();   // keep the hierarchy diagram in sync with the current config
+  }
+
+  function reset(){
+    logEl.innerHTML=''; step=0;
+    ['mAdhere','mProp','mRisk','mCtx','mRework'].forEach(function(i){ set(i,'—',false); });
+    ['dAdhere','dProp','dRisk','dCtx','dRework'].forEach(function(i){ detail(i,''); });
+    meter('ctxMeter', 0, false);
+    var v = document.getElementById('verdict'); v.className='verdict';
+    v.innerHTML = 'Press <strong>Run setup</strong> to evaluate the configuration.';
+    drawArch();   // reflect the (reset) current config in the diagram
+  }
+
+  document.getElementById('runBtn').addEventListener('click', run);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  // ── Canvas diagram (hairline ink on paper; Alps red flags the mistake) ─
+  // Reads the SAME live config as run(); each anti-pattern element is Alps red
+  // ONLY while active, and reverts to ink once the choice is fixed.
+  function drawArch(){
+    var c = document.getElementById('arch'), x = c.getContext('2d');
+    var INK='#000', GREY='#6b675f', RED='#ed1c24', PAPER='#fbfaf6';
+    // Current configuration — same selectors run() reads.
+    var scope = groups.segScope(), org = groups.segOrg(), cmd = groups.segCmd(), mode = groups.segMode();
+    var refine = groups.segRefine(), pkg = groups.segPkg();
+    // Anti-pattern flags: red ONLY when the anti-pattern is active.
+    var scopeBad = scope !== 'project';   // personal config doesn't reach the team
+    var orgBad   = org   !== 'rules';     // always-on root-file bloat
+    var cmdBad   = cmd   !== 'project';   // personal-scoped (or over-built) command
+    var modeBad  = mode  !== 'plan';      // unreviewed direct migration
+    var refineBad= refine !== 'interview';// vague one-shot loops without converging
+    var pkgBad   = pkg   !== 'command';   // over-built Skill for a simple prompt
+    var scopeColor = scopeBad ? RED : INK;
+    var cmdColor   = cmdBad   ? RED : INK;
+    // Intrinsic canvas dimensions so it renders correctly even while hidden.
+    var W = c.width, H = c.height;
+    x.clearRect(0,0,W,H);
+    x.fillStyle = PAPER; x.fillRect(0,0,W,H);
+    x.textBaseline = 'alphabetic';
+
+    function box(bx,by,bw,bh,title,sub,color,dashed){
+      x.save();
+      x.strokeStyle = color; x.lineWidth = (color===RED?2:1.5);
+      if(dashed) x.setLineDash([6,4]);
+      x.strokeRect(bx,by,bw,bh);
+      x.setLineDash([]);
+      x.fillStyle = color;
+      x.font = '600 15px "FDJR Text", system-ui, sans-serif';
+      x.fillText(title, bx+14, by+25);
+      if(sub){
+        x.fillStyle = (color===RED?RED:GREY);
+        x.font = '12px "FDJR Text", system-ui, sans-serif';
+        wrap(sub, bx+14, by+44, bw-28, 16);
+      }
+      x.restore();
+    }
+    function wrap(text, tx, ty, maxw, lh){
+      var words = text.split(' '), line = '', yy = ty;
+      for(var i=0;i<words.length;i++){
+        var test = line + words[i] + ' ';
+        if(x.measureText(test).width > maxw && line){ x.fillText(line.trim(), tx, yy); line = words[i]+' '; yy += lh; }
+        else line = test;
+      }
+      x.fillText(line.trim(), tx, yy);
+    }
+    function arrow(x1,y1,x2,y2,color){
+      x.save(); x.strokeStyle=color; x.fillStyle=color; x.lineWidth=1.5;
+      x.beginPath(); x.moveTo(x1,y1); x.lineTo(x2,y2); x.stroke();
+      var a=Math.atan2(y2-y1,x2-x1);
+      x.beginPath(); x.moveTo(x2,y2);
+      x.lineTo(x2-9*Math.cos(a-0.4), y2-9*Math.sin(a-0.4));
+      x.lineTo(x2-9*Math.cos(a+0.4), y2-9*Math.sin(a+0.4));
+      x.closePath(); x.fill(); x.restore();
+    }
+
+    // header
+    x.fillStyle = GREY; x.font = '600 11px "FDJR Text", system-ui, sans-serif';
+    x.fillText('LOWEST SPECIFICITY', 20, 24);
+    x.fillText('HIGHEST SPECIFICITY', W-150, 24);
+
+    // User level — personal-config-doesn't-reach-team. Red ONLY when scope = user.
+    box(20, 44, 360, 96, 'User — ~/.claude/CLAUDE.md',
+        scopeBad
+          ? 'Personal & NOT version-controlled. Relied on for team conventions → never propagates.'
+          : 'Personal & NOT version-controlled — but team conventions live in project scope, so nothing is lost here.',
+        scopeColor, scopeBad);
+    if(scopeBad){
+      x.fillStyle = RED; x.font = '600 11px "FDJR Text", system-ui, sans-serif';
+      x.fillText('✕ does not reach the team', 34, 132);
+    }
+
+    // Project level — always-on root-file bloat. Red ONLY when org = single root file.
+    box(20, 168, 360, 78, 'Project — CLAUDE.md / .claude/CLAUDE.md',
+        orgBad
+          ? 'Committed, but one always-on root file loads every rule on every edit → context bloat.'
+          : 'Committed to the repo. Auto-loaded for every contributor after clone.',
+        orgBad ? RED : INK, false);
+    if(orgBad){
+      x.fillStyle = RED; x.font = '600 11px "FDJR Text", system-ui, sans-serif';
+      x.fillText('✕ always-on rule bloat', 34, 240);
+    }
+
+    // Path rules — the lean alternative (always ink; it is never an anti-pattern)
+    box(20, 272, 360, 78, '.claude/rules/*.md  (paths: globs)',
+        'Path-scoped. Loads only when the edited file matches — lean context.', INK, false);
+
+    // Commands — personal/over-built command. Red ONLY when cmd ≠ project.
+    box(20, 372, 360, 56, '.claude/commands/review.md',
+        cmdBad
+          ? (cmd==='user'
+              ? '~/.claude/commands/ — personal scope, the rest of the team has no /review.'
+              : 'Over-built as a Skill — needless overhead for a fixed checklist.')
+          : 'Committed slash command — shipped to all contributors.',
+        cmdColor, false);
+
+    // The shared session / repo node. Unreviewed-migration element: red ONLY when mode = direct.
+    box(560, 200, 280, 120, 'Claude Code session',
+        modeBad
+          ? 'Effective config merges by specificity — but the 45-file migration runs direct: edits ship unreviewed.'
+          : 'Effective config = project + path-rule matches + commands, merged by specificity. Risky migration is planned first.',
+        modeBad ? RED : INK, false);
+    if(modeBad){
+      x.fillStyle = RED; x.font = '600 11px "FDJR Text", system-ui, sans-serif';
+      x.fillText('✕ unreviewed direct execution', 574, 312);
+    }
+
+    // Feature work node — unfamiliar-domain refinement + capability packaging.
+    // Red ONLY when the vague-one-shot or over-built-Skill anti-pattern is active.
+    var featBad = refineBad || pkgBad;
+    box(560, 340, 280, 72, 'Feature work & packaging',
+        refineBad
+          ? 'Unfamiliar cache built via a vague one-shot → loops without converging, reworked every pass.'
+          : (pkgBad
+              ? 'Interviewed & refined — but the simple PR-summary prompt is over-built as a full Agent Skill.'
+              : 'Interviewed & refined in passes; the simple prompt ships as a right-sized slash command.'),
+        featBad ? RED : INK, false);
+    if(featBad){
+      x.fillStyle = RED; x.font = '600 11px "FDJR Text", system-ui, sans-serif';
+      x.fillText(refineBad ? '✕ vague one-shot loops' : '✕ over-built Skill', 574, 405);
+    }
+    // session → feature-work arrow (red when either anti-pattern is active)
+    arrow(700, 322, 700, 338, featBad ? RED : INK);
+
+    // arrows from shared layers into session (ink), user layer crossed (red, no connect)
+    // Project arrow turns red when the always-on-bloat anti-pattern is active.
+    arrow(380, 207, 558, 235, orgBad ? RED : INK);
+    arrow(380, 311, 558, 262, INK);
+    // Command arrow turns red when the command-scope anti-pattern is active.
+    arrow(380, 398, 558, 300, cmdColor);
+    // user level: broken arrow that stops short — red ONLY when relied on for team scope.
+    x.save(); x.strokeStyle = scopeColor; x.lineWidth = 1.5; x.setLineDash([5,4]);
+    x.beginPath(); x.moveTo(380, 92); x.lineTo(470, 150); x.stroke(); x.setLineDash([]);
+    if(scopeBad){
+      x.fillStyle = RED; x.font = '600 18px "FDJR Text", system-ui, sans-serif';
+      x.fillText('✕', 474, 158);
+    }
+    x.restore();
+  }
+
+  // ── Knowledge check (4 questions) ──────────────────────────────────────
+  var KC = [
+    {
+      q: 'A new engineer clones the repo and Claude Code ignores the team’s testing standards. The standards live in your personal ~/.claude/CLAUDE.md. What is the correct fix?',
+      options: [
+        'Move the standards into the project-level CLAUDE.md at the repo root.',
+        'Have each engineer copy the content into their own ~/.claude/CLAUDE.md on first clone.',
+        'Add an @import in the README that points Claude at the standards file.'
+      ],
+      correct: 0,
+      explain: 'User-level ~/.claude/CLAUDE.md is not version-controlled and never propagates; project-level CLAUDE.md is committed and auto-loaded for every contributor.'
+    },
+    {
+      q: 'Test files are colocated with source throughout the repo. You want test conventions applied automatically whenever Claude edits any test file, regardless of directory. Best approach?',
+      options: [
+        'Put all conventions in the root CLAUDE.md so they always load into context on every session.',
+        'Create a .claude/rules/ file scoped with paths: [’**/*.test.*’] in its frontmatter.',
+        'Add a CLAUDE.md to every directory that contains test files.'
+      ],
+      correct: 1,
+      explain: 'A path-scoped rule fires on any file matching the glob regardless of directory, loading only when relevant — a root file would always-load and bloat context, and per-directory files duplicate the rules.'
+    },
+    {
+      q: 'You want a /review slash command that every engineer gets when they clone the repo. Where should it be defined?',
+      options: [
+        'In ~/.claude/commands/review.md so it is immediately ready on your own machine.',
+        'As a documented workflow section inside CLAUDE.md.',
+        'In the project’s .claude/commands/review.md, committed to the repo.'
+      ],
+      correct: 2,
+      explain: '.claude/commands/ is version-controlled and shared with all contributors; ~/.claude/commands/ is personal-scoped, and CLAUDE.md stores context, not executable command definitions.'
+    },
+    {
+      q: 'You must migrate 45+ files from a deprecated HTTP client to one with different error semantics. Which mode should you start in?',
+      options: [
+        'Direct execution — the task is clear and starting immediately ships files faster.',
+        'Plan mode, to map how the deprecated client is used before touching any file.',
+        'Direct execution for familiar files; plan mode only for unfamiliar ones.'
+      ],
+      correct: 1,
+      explain: 'Plan mode is built for large-scale, multi-file changes with architectural implications; direct execution risks discovering incompatibilities mid-migration across dozens of already-edited, unreviewed files.'
+    },
+    {
+      q: 'You ask Claude to build a caching layer for a subsystem whose invalidation rules you don’t fully know. A single vague prompt has looped three times without converging. What is the most effective next move?',
+      options: [
+        'Let Claude interview you with clarifying questions, then refine in passes.',
+        'Re-send the same prompt with a firmer instruction to get the design right this time and stop asking.',
+        'Split the prompt into many tiny one-shot prompts and run each one independently without sharing context between them.'
+      ],
+      correct: 0,
+      explain: 'In an unfamiliar domain the interview pattern surfaces hidden constraints (invalidation, failure modes) before implementation, so refinement converges instead of looping on a vague one-shot.'
+    },
+    {
+      q: 'Your team reuses one short "summarize this PR" prompt daily. You want it committed and available to everyone. What should you build?',
+      options: [
+        'A committed .claude/commands/ slash command.',
+        'An Agent Skill with a SKILL.md, bundled context files, and argument-hint frontmatter so the capability is fully self-describing.',
+        'A subagent definition so the prompt always runs in its own isolated forked context away from the main session.'
+      ],
+      correct: 0,
+      explain: 'A simple repeatable prompt is exactly what a committed slash command is for; a full Skill or subagent adds context and isolation overhead this fixed prompt does not need.'
+    }
+  ];
+
+  function renderKC(){
+    var host = document.getElementById('kcHost'); host.innerHTML='';
+    KC.forEach(function(item, qi){
+      var q = document.createElement('p'); q.className='kc-q';
+      q.textContent = (qi+1) + '. ' + item.q; host.appendChild(q);
+      var group = document.createElement('div'); group.setAttribute('role','group'); group.setAttribute('aria-label','Question '+(qi+1)+' options');
+      item.options.forEach(function(opt,i){
+        var b=document.createElement('button'); b.className='kc-opt'; b.type='button'; b.textContent=opt;
+        b.addEventListener('click', function(){
+          Array.prototype.forEach.call(group.querySelectorAll('.kc-opt'), function(o,j){
+            o.disabled=true; o.dataset.state = j===item.correct ? 'correct' : (j===i ? 'wrong' : 'muted');
+          });
+          var e=document.createElement('div');
+          e.className='kc-exp' + (i===item.correct ? '' : ' is-bad');
+          e.textContent=(i===item.correct ? 'Correct. ' : 'Not quite. ') + item.explain;
+          group.appendChild(e);
+        });
+        group.appendChild(b);
+      });
+      host.appendChild(group);
+    });
+  }
+
+  // ── Reduced-motion guard ───────────────────────────────────────────────
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    var s=document.createElement('style'); s.textContent='*{transition:none !important; animation:none !important}'; document.head.appendChild(s);
+  }
+
+  // init
+  reset(); renderKC(); drawArch();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>High-Stakes Classifier: Criteria & Review Architecture — CarbonSilicon</title>
+<link rel="stylesheet" href="/simulations/csl-sim.css">
+<style>
+  /* sim-specific CSS only — brand-level styling lives in csl-sim.css */
+  .arch-wrap{ position:relative }
+  .run-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px }
+  .verdict{ margin-top:12px; padding:.6rem .75rem; border:1px solid var(--hair-2);
+    border-radius:var(--r-sm); font-size:12.5px; line-height:1.5; background:var(--paper) }
+  .verdict.is-bad{ border-color:var(--alps); color:var(--alps) }
+  .verdict .lbl{ font-weight:600; text-transform:uppercase; letter-spacing:.08em; font-size:10.5px;
+    color:var(--ink-2); display:block; margin-bottom:3px }
+  .verdict.is-bad .lbl{ color:var(--alps) }
+  .legend{ display:flex; gap:16px; flex-wrap:wrap; margin-top:10px; font-size:11px; color:var(--ink-2) }
+  .legend span{ display:inline-flex; align-items:center; gap:6px }
+  .swatch{ width:22px; height:0; border-top:2px solid #000 }
+  .swatch.red{ border-top-color:var(--alps) }
+  .metrics--4{ grid-template-columns:repeat(auto-fit,minmax(110px,1fr)) }
+  .metrics--6{ grid-template-columns:repeat(auto-fit,minmax(108px,1fr)) }
+  .kc-counter{ font-size:11px; color:var(--ink-2); margin:0 0 14px; letter-spacing:.04em }
+</style>
+</head>
+<body>
+<main class="sim">
+
+  <div class="sim-head-row">
+    <div>
+      <div class="sim-eyebrow">Domain 4 · Interactive Simulation</div>
+      <h1 class="sim-title">High-Stakes Classifier: Criteria &amp; Review</h1>
+    </div>
+    <button class="btn btn--ghost help-btn" id="helpBtn" aria-haspopup="dialog">? Help</button>
+  </div>
+  <p class="sim-deck">You are wiring up a classifier that flags policy-violating support messages for refund-eligibility review — a high-stakes decision. Tune the prompt criteria and the review pipeline, then watch the false-positive rate, coverage, consistency, and reviewer agreement respond.</p>
+
+  <div class="tabs" role="tablist" aria-label="Simulator sections">
+    <button class="tab" role="tab" id="t-sim"  aria-controls="p-sim"  aria-selected="true">Simulate</button>
+    <button class="tab" role="tab" id="t-arch" aria-controls="p-arch" aria-selected="false">Architecture</button>
+    <button class="tab" role="tab" id="t-kc"   aria-controls="p-kc"   aria-selected="false">Knowledge Check</button>
+  </div>
+
+  <!-- ── Simulate ──────────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-sim" role="tabpanel" aria-labelledby="t-sim">
+    <div class="cols cols-2">
+      <div class="panel">
+        <p class="panel-label">Configuration</p>
+
+        <div class="field">
+          <label for="cfgCriteria">Flagging criteria</label>
+          <select id="cfgCriteria">
+            <option value="vague" selected>Vague — "flag anything suspicious"</option>
+            <option value="explicit">Explicit — enumerated, testable rules</option>
+          </select>
+          <span class="hint">Vague prompts ask the model to self-judge; explicit categorical criteria define exactly what to flag vs skip.</span>
+        </div>
+
+        <label class="toggle" style="margin-bottom:14px">
+          <input type="checkbox" id="cfgFewshot" aria-checked="false">
+          <span class="track"></span>
+          <span>Include 2–4 few-shot examples (incl. ambiguous cases)</span>
+        </label>
+
+        <div class="field">
+          <label for="cfgPasses">Review passes</label>
+          <select id="cfgPasses">
+            <option value="single" selected>Single pass</option>
+            <option value="multi">Multi-pass independent review + gate</option>
+          </select>
+          <span class="hint">High-stakes decisions warrant a second review before the decision is final.</span>
+        </div>
+
+        <div class="field">
+          <label for="cfgReviewer">Reviewer</label>
+          <select id="cfgReviewer">
+            <option value="self" selected>Self-review (same session, retains context)</option>
+            <option value="independent">Independent instance (no prior context)</option>
+          </select>
+          <span class="hint">A reviewer that carries the generator's reasoning context inherits its blind spots.</span>
+        </div>
+
+        <div class="field">
+          <label for="cfgCapture">Verdict capture</label>
+          <select id="cfgCapture">
+            <option value="prose" selected>Parse the label out of free-text prose</option>
+            <option value="enum">Tool-use schema — constrained enum field</option>
+          </select>
+          <span class="hint">A constrained enum (e.g. flag | skip | unclear) via a tool-use JSON schema guarantees an in-vocabulary verdict; parsing prose yields off-vocabulary, unparseable labels.</span>
+        </div>
+
+        <div class="field">
+          <label for="cfgDispatch">Review volume / dispatch</label>
+          <select id="cfgDispatch">
+            <option value="concurrent" selected>Many concurrent synchronous calls</option>
+            <option value="batch">Message Batches API + prompt-cached rubric prefix</option>
+          </select>
+          <span class="hint">At high, latency-tolerant volume the Message Batches API plus prompt caching of the stable rubric/system prefix cuts cost and avoids throughput blowout.</span>
+        </div>
+
+        <div class="run-row">
+          <button class="btn btn--primary" id="runBtn">▶ Run</button>
+          <button class="btn btn--ghost" id="resetBtn">↺ Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-label">Outcome</p>
+        <div class="metrics metrics--6" id="metrics">
+          <div class="metric"><div class="v tnum" id="mFP">—</div><div class="k">False-positive rate</div></div>
+          <div class="metric"><div class="v tnum" id="mRecall">—</div><div class="k">Recall / coverage</div></div>
+          <div class="metric"><div class="v tnum" id="mConsist">—</div><div class="k">Consistency</div></div>
+          <div class="metric"><div class="v tnum" id="mAgree">—</div><div class="k">Reviewer agreement</div></div>
+          <div class="metric"><div class="v tnum" id="mParse">—</div><div class="k">Parseable verdicts</div></div>
+          <div class="metric"><div class="v tnum" id="mCost">—</div><div class="k">Cost efficiency</div></div>
+        </div>
+        <div style="margin-top:12px">
+          <div class="meter" id="fpMeter"><i></i></div>
+          <div class="metric" style="padding:6px 0 0"><div class="k">False-positive rate vs trust threshold (15%)</div></div>
+        </div>
+        <div class="verdict" id="verdict" role="status" aria-live="polite">
+          <span class="lbl">Verdict</span><span id="verdictText">Configure the pipeline and press Run.</span>
+        </div>
+        <div class="log" id="log" style="margin-top:12px" aria-live="polite" aria-label="Consequence log"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ──────────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-arch" role="tabpanel" aria-labelledby="t-arch" hidden>
+    <div class="panel arch-wrap">
+      <p class="panel-label">Review pipeline</p>
+      <canvas id="arch" width="820" height="360" aria-label="Review pipeline diagram: generate, then flag against criteria, then independent review, then a decision gate. The vague-criteria and self-review path is highlighted in red as the high-risk route."></canvas>
+      <div class="legend">
+        <span><span class="swatch"></span> Sound path (explicit criteria, independent review)</span>
+        <span><span class="swatch red"></span> High-risk path (vague criteria / self-review)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Knowledge Check ───────────────────────────────────────────────── -->
+  <section class="tabpane" id="p-kc" role="tabpanel" aria-labelledby="t-kc" hidden>
+    <div class="panel" id="kcHost"></div>
+  </section>
+
+</main>
+
+<!-- ── Help overlay ────────────────────────────────────────────────────── -->
+<div class="help" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="help-card">
+    <h2 id="helpTitle">How this simulation works</h2>
+    <ol>
+      <li>Set the four <strong>configuration</strong> controls on the left: criteria specificity, few-shot examples, review passes, and reviewer type.</li>
+      <li>Press <strong>Run</strong>. Each choice writes a plain-English consequence and moves the metrics deterministically.</li>
+      <li>Drive the <strong>false-positive rate</strong> below the 15% trust threshold while keeping recall, consistency, and reviewer agreement high.</li>
+    </ol>
+    <p style="font-size:12.5px;color:var(--ink-2);line-height:1.5;margin:0 0 1.2rem">
+      Red means a metric crossed into failure: high false positives, a single pass that misses errors, or self-review confirmation bias.
+    </p>
+    <button class="btn btn--primary" id="helpClose">Got it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function selectTab(tab){
+    tabs.forEach(function(t){
+      var on = t === tab;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.setAttribute('tabindex', on ? '0' : '-1');
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    // keep the pipeline diagram current when the Architecture tab is shown
+    if(tab.getAttribute('aria-controls') === 'p-arch'){ drawArch(); }
+  }
+  tabs.forEach(function(t){
+    t.setAttribute('tabindex', t.getAttribute('aria-selected') === 'true' ? '0' : '-1');
+    t.addEventListener('click', function(){ selectTab(t); });
+    t.addEventListener('keydown', function(e){
+      var i = tabs.indexOf(t), n = tabs.length;
+      if(e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
+        e.preventDefault();
+        var nx = tabs[(i + (e.key === 'ArrowRight' ? 1 : n - 1)) % n];
+        selectTab(nx); nx.focus();
+      }
+    });
+  });
+
+  // ── Help ───────────────────────────────────────────────────────────────
+  var help = document.getElementById('help'), helpBtn = document.getElementById('helpBtn');
+  function openHelp(){ help.hidden = false; document.getElementById('helpClose').focus(); }
+  function closeHelp(){ help.hidden = true; helpBtn.focus(); }
+  helpBtn.addEventListener('click', openHelp);
+  document.getElementById('helpClose').addEventListener('click', closeHelp);
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && !help.hidden) closeHelp(); });
+
+  // ── Log helper ─────────────────────────────────────────────────────────
+  var logEl = document.getElementById('log'), step = 0;
+  function log(msg, cls){
+    var d = document.createElement('div');
+    d.className = 'log-line' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<span class="t">' + String(++step).padStart(2,'0') + '</span>  ' + msg;
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ── Model: config → deterministic consequences (THE teaching core) ──────
+  // Baseline = best case. Each gotcha visibly degrades / reddens a metric.
+  var FP_THRESHOLD = 0.15;        // above this, trust in the classifier collapses
+  function run(){
+    logEl.innerHTML = ''; step = 0;
+    var cfg = readConfig();
+    var criteria = cfg.criteria;
+    var fewshot  = cfg.fewshot;
+    var passes   = cfg.passes;
+    var reviewer = cfg.reviewer;
+    var capture  = cfg.capture;
+    var dispatch = cfg.dispatch;
+
+    // start from the strong configuration, then apply penalties
+    var fp = 0.06, recall = 0.93, consist = 0.95, agree = 0.94, parse = 0.99, cost = 0.95;
+
+    // (a) criteria specificity → drives false positives + coverage
+    if(criteria === 'explicit'){
+      log('Explicit enumerated criteria: each message is tested against concrete inclusion/exclusion rules.', 'step');
+    } else {
+      fp += 0.26; recall -= 0.05; consist -= 0.10;
+      log('Vague "flag anything suspicious" — the model self-judges with no testable rule, so it over-flags benign messages.', 'bad');
+      log('Confidence-based hedges like "be conservative" would not help: precision needs categorical criteria, not self-regulation.', 'bad');
+    }
+
+    // (b) few-shot examples → drives consistency (and trims a little FP)
+    if(fewshot){
+      consist += 0.04; fp = Math.max(0.02, fp - 0.03);
+      log('Few-shot examples (including ambiguous cases) anchor the label boundary — consistent decisions across runs.', 'step');
+    } else {
+      consist -= 0.16;
+      log('No few-shot examples — labeling drifts; identical messages get different verdicts across runs.', 'bad');
+    }
+
+    // (c) review passes → high-stakes gate catches missed errors
+    if(passes === 'multi'){
+      recall += 0.05;
+      log('Multi-pass review: a second pass re-examines each flag before the decision gate is reached.', 'step');
+    } else {
+      recall -= 0.14;
+      log('Single pass on a high-stakes decision — missed errors ship straight to the customer with no gate.', 'bad');
+    }
+
+    // (d) reviewer independence → confirmation bias vs genuine catch
+    if(passes === 'multi'){
+      if(reviewer === 'independent'){
+        agree += 0.00; recall += 0.04; fp = Math.max(0.02, fp - 0.02);
+        log('Independent instance reviews with no generator context — it catches subtle errors the author rationalized.', 'step');
+      } else {
+        agree -= 0.30; recall -= 0.06;
+        log('Self-review retains the generator’s reasoning context — confirmation bias rubber-stamps its own flags (agreement is inflated, not earned).', 'bad');
+      }
+    } else {
+      // no second pass: reviewer setting is moot, agreement undefined-ish
+      agree -= 0.34;
+      log('No second reviewer in a single-pass design — there is nothing to agree with; high-stakes errors go unchecked.', 'bad');
+    }
+
+    // (e) verdict capture (4.3) → schema-constrained enum vs parsing free-text prose
+    if(capture === 'enum'){
+      log('Verdict captured as a constrained enum (flag | skip | unclear) via a tool-use JSON schema — every verdict is in-vocabulary and machine-readable.', 'step');
+    } else {
+      parse -= 0.18; consist -= 0.06;
+      log('Verdict parsed out of free-text prose — the model emits off-vocabulary labels ("possibly a violation?") that the parser drops or misreads.', 'bad');
+      log('A constrained enum via tool use would guarantee a schema-compliant verdict; prose parsing is fragile and silently loses cases.', 'bad');
+    }
+
+    // (f) dispatch at volume (4.5) → batch + prompt caching vs concurrent sync calls
+    if(dispatch === 'batch'){
+      cost += 0.04;
+      log('Message Batches API (50% cost savings) with the stable rubric/system prefix prompt-cached — high latency-tolerant volume processes cheaply without throughput strain.', 'step');
+    } else {
+      cost -= 0.45;
+      log('Many concurrent synchronous calls re-send the full rubric every request and hammer rate limits — cost and throughput blow out at review volume.', 'bad');
+    }
+
+    // clamp to sane ranges
+    fp = Math.max(0.01, Math.min(0.60, fp));
+    recall = Math.max(0.40, Math.min(0.99, recall));
+    consist = Math.max(0.40, Math.min(0.99, consist));
+    agree = Math.max(0.30, Math.min(0.99, agree));
+    parse = Math.max(0.50, Math.min(0.99, parse));
+    cost = Math.max(0.30, Math.min(0.99, cost));
+
+    var fpBad = fp > FP_THRESHOLD;
+    set('mFP', Math.round(fp*100)+'%', fpBad);
+    set('mRecall', Math.round(recall*100)+'%', recall < 0.80);
+    set('mConsist', Math.round(consist*100)+'%', consist < 0.80);
+    set('mAgree', Math.round(agree*100)+'%', agree < 0.70);
+    set('mParse', Math.round(parse*100)+'%', parse < 0.90);
+    set('mCost', Math.round(cost*100)+'%', cost < 0.70);
+    // meter shows FP relative to a doubled-threshold scale so 15% lands mid-bar
+    meter('fpMeter', fp / (FP_THRESHOLD * 2), fpBad);
+
+    var ok = !fpBad && recall >= 0.80 && consist >= 0.80 && agree >= 0.70 && parse >= 0.90 && cost >= 0.70;
+    verdict(ok
+      ? 'Trustworthy classifier: false positives under threshold, strong coverage, consistent labels, genuine independent agreement, schema-constrained verdicts, and efficient dispatch.'
+      : 'Not deployable as-is — at least one metric is in failure. Explicit criteria, few-shot examples, a multi-pass gate, an independent reviewer, an enum-constrained verdict, and batch dispatch together clear all six.',
+      !ok);
+    log('Run complete.', 'step');
+    drawArch();   // reflect the current configuration in the pipeline diagram
+  }
+
+  function set(id, val, bad){ var el = document.getElementById(id); el.textContent = val; el.classList.toggle('is-bad', !!bad); }
+  function meter(id, frac, bad){ var m = document.getElementById(id); m.classList.toggle('is-bad', !!bad); m.firstElementChild.style.width = Math.max(0, Math.min(100, frac*100)) + '%'; }
+  function verdict(text, bad){ var v = document.getElementById('verdict'); v.classList.toggle('is-bad', !!bad); document.getElementById('verdictText').textContent = text; }
+  function reset(){
+    // reset controls to the ANTI-PATTERN default — learner starts degraded and must optimize
+    document.getElementById('cfgCriteria').value = 'vague';
+    document.getElementById('cfgFewshot').checked = false;
+    document.getElementById('cfgPasses').value = 'single';
+    document.getElementById('cfgReviewer').value = 'self';
+    document.getElementById('cfgCapture').value = 'prose';
+    document.getElementById('cfgDispatch').value = 'concurrent';
+    logEl.innerHTML = '';
+    set('mFP','—',false); set('mRecall','—',false); set('mConsist','—',false); set('mAgree','—',false);
+    set('mParse','—',false); set('mCost','—',false);
+    meter('fpMeter',0,false);
+    verdict('Configure the pipeline and press Run.', false);
+    drawArch();   // diagram reflects the reset (anti-pattern default) config
+  }
+
+  document.getElementById('runBtn').addEventListener('click', run);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  // ── Config reader: the single source of truth both run() and drawArch() use
+  function readConfig(){
+    return {
+      criteria: document.getElementById('cfgCriteria').value,   // 'vague' | 'explicit'
+      fewshot:  document.getElementById('cfgFewshot').checked,  // bool
+      passes:   document.getElementById('cfgPasses').value,     // 'single' | 'multi'
+      reviewer: document.getElementById('cfgReviewer').value,   // 'self' | 'independent'
+      capture:  document.getElementById('cfgCapture').value,    // 'prose' | 'enum'
+      dispatch: document.getElementById('cfgDispatch').value    // 'concurrent' | 'batch'
+    };
+  }
+
+  // ── Canvas diagram: review pipeline (ink on paper) ─────────────────────
+  // Reflects the CURRENT configuration: each anti-pattern element is Alps red
+  // ONLY while that anti-pattern is active; ink once the learner fixes it.
+  function drawArch(){
+    var c = document.getElementById('arch'), x = c.getContext('2d');
+    // intrinsic pixel dimensions — correct even while the pane is hidden
+    var W = c.width, H = c.height;
+    var ink = '#000', red = '#ed1c24', dim = '#6b675f';
+
+    // current configuration → which anti-patterns are active right now
+    var cfg = readConfig();
+    var vagueOn   = cfg.criteria === 'vague';        // vague-criteria node
+    var selfOn    = cfg.reviewer === 'self';         // self-review path
+    var singleOn  = cfg.passes   === 'single';       // single-pass / no independent review
+    var fewshotMissing = !cfg.fewshot;               // few-shot examples absent
+    var proseOn   = cfg.capture  === 'prose';        // free-text parse (vs enum schema)
+    var syncOn    = cfg.dispatch === 'concurrent';   // concurrent sync calls (vs batch)
+
+    x.clearRect(0,0,W,H);
+    x.textBaseline = 'middle';
+
+    function box(bx,by,bw,bh,title,sub,color){
+      x.strokeStyle = color || ink; x.lineWidth = (color === red ? 2 : 1.4);
+      x.strokeRect(bx,by,bw,bh);
+      x.fillStyle = color || ink; x.font = '600 14px "FDJR Text", system-ui, sans-serif';
+      x.fillText(title, bx+12, by+ (sub ? 22 : bh/2));
+      if(sub){ x.fillStyle = (color === red ? red : dim); x.font = '12px "FDJR Text", system-ui, sans-serif'; x.fillText(sub, bx+12, by+42); }
+    }
+    function arrow(x1,y1,x2,y2,color){
+      x.strokeStyle = color || ink; x.fillStyle = color || ink; x.lineWidth = (color === red ? 2 : 1.4);
+      x.beginPath(); x.moveTo(x1,y1); x.lineTo(x2,y2); x.stroke();
+      var a = Math.atan2(y2-y1, x2-x1);
+      x.beginPath(); x.moveTo(x2,y2);
+      x.lineTo(x2 - 9*Math.cos(a - 0.4), y2 - 9*Math.sin(a - 0.4));
+      x.lineTo(x2 - 9*Math.cos(a + 0.4), y2 - 9*Math.sin(a + 0.4));
+      x.closePath(); x.fill();
+    }
+
+    // colour helpers: red only when the corresponding anti-pattern is active
+    var criteriaColor = vagueOn ? red : ink;
+    var reviewColor   = (singleOn || selfOn) ? red : ink;  // path is risky if no independent review
+    var gateColor     = singleOn ? red : ink;              // single-pass = no real decision gate
+
+    // ── pipeline (top row) — flags adapt to current config ───────────────
+    box( 24, 60,140,62,'Generate','draft flags',ink);
+
+    // Criteria node: red when vague, ink when explicit
+    box(206, 60,150,62, vagueOn ? 'Vague criteria' : 'Criteria',
+        vagueOn ? '"flag anything"' : 'explicit rules', criteriaColor);
+
+    // Review node: red when self-review or single-pass (no independent review)
+    box(398, 60,170,62, selfOn ? 'Self-review' : 'Independent',
+        selfOn ? 'retained context' : 'review (fresh ctx)', reviewColor);
+
+    // Decision gate: red when single-pass (errors ship unchecked)
+    box(610, 60,150,62,'Decision',
+        singleOn ? 'no gate → ships' : 'gate → final', gateColor);
+
+    arrow(164,91,206,91, criteriaColor);
+    arrow(356,91,398,91, reviewColor);
+    arrow(568,91,610,91, gateColor);
+
+    // ── Few-shot indicator: red when few-shot examples are missing ───────
+    var fsColor = fewshotMissing ? red : ink;
+    box(206,238,170,52, fewshotMissing ? 'Few-shot: missing' : 'Few-shot: anchored',
+        fewshotMissing ? 'labels drift' : 'boundary anchored', fsColor);
+    // dotted feed from the Criteria node into the few-shot anchor
+    x.save();
+    x.setLineDash([5,4]); x.strokeStyle = fsColor; x.lineWidth = fewshotMissing ? 2 : 1.4;
+    x.beginPath(); x.moveTo(281,122); x.lineTo(281,238); x.stroke();
+    x.restore();
+
+    // ── Verdict-capture node: red when parsing prose, ink when enum schema ─
+    var capColor = proseOn ? red : ink;
+    box(610,160,170,52, proseOn ? 'Parse prose' : 'Enum schema',
+        proseOn ? 'off-vocab labels' : 'tool-use verdict', capColor);
+    // dotted feed from the Decision node down into verdict capture
+    x.save();
+    x.setLineDash([5,4]); x.strokeStyle = capColor; x.lineWidth = proseOn ? 2 : 1.4;
+    x.beginPath(); x.moveTo(685,122); x.lineTo(685,160); x.stroke();
+    x.restore();
+
+    // ── Dispatch node: red on concurrent sync, ink on batch + prompt cache ─
+    var dispColor = syncOn ? red : ink;
+    box(610,238,170,52, syncOn ? 'Sync ×N calls' : 'Batches + cache',
+        syncOn ? 'cost/throughput' : '50% cost, cached', dispColor);
+
+    // ── Risk caption: only while any anti-pattern is active ──────────────
+    var anyRisk = vagueOn || selfOn || singleOn || fewshotMissing || proseOn || syncOn;
+    if(anyRisk){
+      x.fillStyle = red; x.font = '600 12px "FDJR Text", system-ui, sans-serif';
+      x.fillText('active anti-pattern(s) → high-risk route', 398, 264);
+    } else {
+      x.fillStyle = dim; x.font = '600 12px "FDJR Text", system-ui, sans-serif';
+      x.fillText('all four fixed → sound pipeline', 398, 264);
+    }
+  }
+
+  // ── Knowledge Check (4 questions, grounded in D4 + scenario 10) ─────────
+  var KC = [
+    {
+      q: 'A refund-eligibility classifier flags too many benign messages. The prompt says "be conservative, only flag high-confidence violations," yet false positives stay high. What most effectively improves precision?',
+      options: [
+        'Restate the instruction more emphatically — "really, only the most confident flags."',
+        'Replace the vague instruction with explicit criteria for which categories to flag vs skip.',
+        'Lower the temperature so the model behaves more consistently and flags fewer of the borderline cases.',
+        'Switch to a larger model tier, which follows conservative instructions more faithfully.'
+      ],
+      correct: 1,
+      explain: 'Vague self-regulation ("be conservative") does not improve precision — explicit categorical inclusion/exclusion criteria do. Temperature changes consistency, not what counts as reportable.'
+    },
+    {
+      q: 'Identical support messages receive different violation labels on different runs. Detailed instructions already exist. What is the next most effective fix for consistency?',
+      options: [
+        'Add 2–4 few-shot examples covering the ambiguous cases, in the desired output format.',
+        'Add more prose to the instructions restating the policy in greater and more precise detail.',
+        'Raise temperature so the model explores more label options before deciding.',
+        'Tell the model to "always follow the labeling rules exactly."'
+      ],
+      correct: 0,
+      explain: 'When detailed instructions already produce inconsistent results, targeted few-shot examples (especially for ambiguous cases) are the most effective next step — they demonstrate the label boundary concretely.'
+    },
+    {
+      q: 'A team generates a decision with one Claude session, then asks the same session to review it. Subtle errors slip through. What is the root cause?',
+      options: [
+        'The review prompt is not specific enough about which particular error categories to look for.',
+        'Extended thinking is off, so the session has too little time to reason.',
+        'The generating session keeps its reasoning context and rarely questions its own decisions.',
+        'The context window is too small to hold both the decision and the review.'
+      ],
+      correct: 2,
+      explain: 'Self-review retains the generator’s reasoning context, so it inherits the same blind spots — confirmation bias. An independent instance with no prior context catches subtle errors self-review misses.'
+    },
+    {
+      q: 'For a single high-stakes refund decision, what review architecture best reduces missed errors before the decision becomes final?',
+      options: [
+        'A single review pass with a larger context window to give the decision more attention.',
+        'Self-review in the generating session with "be more critical" appended to the prompt.',
+        'A multi-pass design where an independent instance reviews before a decision gate.',
+        'Skipping review entirely and raising the flagging threshold to compensate.'
+      ],
+      correct: 2,
+      explain: 'High-stakes decisions warrant a multi-pass design: an independent reviewer (no generator context) examines the flag before a gate finalizes it. A larger window does not improve attention quality, and self-review does not remove the author’s bias.'
+    },
+    {
+      q: 'The classifier must return one of flag / skip / unclear, but a downstream parser keeps choking on values like "probably a violation." What is the most reliable fix?',
+      options: [
+        'Capture the verdict as a constrained enum via a tool-use JSON schema.',
+        'Add a regular expression that normalizes the prose into one of the three accepted verdict values before the parser runs.',
+        'Lower the temperature so the model phrases its free-text verdict in a more predictable and parser-friendly way each time.',
+        'Append "respond with only one word" to the end of the prompt and keep parsing the free-text reply as before.'
+      ],
+      correct: 0,
+      explain: 'A constrained enum field in a tool-use JSON schema guarantees the verdict is one of the allowed values — no off-vocabulary prose to parse. Regexes, temperature, and prompt nudges only reduce, not eliminate, malformed labels.'
+    },
+    {
+      q: 'A nightly job classifies a large, latency-tolerant backlog of messages against a long, unchanging rubric. How do you cut cost without throughput blowout?',
+      options: [
+        'Use the Message Batches API and prompt-cache the stable rubric prefix.',
+        'Fire many concurrent synchronous requests and add exponential-backoff retries so the job still finishes by morning despite rate limits.',
+        'Trim the rubric down to a short summary on every request so each synchronous call sends far fewer input tokens to the model.',
+        'Spread the synchronous calls across several API keys to raise the effective per-minute rate limit for the run.'
+      ],
+      correct: 0,
+      explain: 'A latency-tolerant overnight job is the ideal Message Batches case (50% cost savings), and prompt caching the unchanging rubric prefix avoids re-billing those tokens each call. Concurrent sync calls and key-spreading just blow out cost and throughput.'
+    }
+  ];
+
+  function renderKC(){
+    var host = document.getElementById('kcHost'); host.innerHTML = '';
+    var counter = document.createElement('p'); counter.className = 'kc-counter';
+    counter.textContent = KC.length + ' questions';
+    host.appendChild(counter);
+
+    KC.forEach(function(item, qi){
+      var q = document.createElement('p'); q.className = 'kc-q';
+      q.textContent = (qi+1) + '. ' + item.q; host.appendChild(q);
+
+      var group = document.createElement('div');
+      group.setAttribute('role','group');
+      group.setAttribute('aria-label','Question ' + (qi+1));
+
+      item.options.forEach(function(opt, i){
+        var b = document.createElement('button'); b.className = 'kc-opt'; b.type = 'button'; b.textContent = opt;
+        b.addEventListener('click', function(){
+          Array.prototype.forEach.call(group.querySelectorAll('.kc-opt'), function(o, j){
+            o.disabled = true;
+            o.dataset.state = j === item.correct ? 'correct' : (j === i ? 'wrong' : 'muted');
+          });
+          if(!group.querySelector('.kc-exp')){
+            var e = document.createElement('div'); e.className = 'kc-exp';
+            e.textContent = (i === item.correct ? 'Correct. ' : 'Not quite. ') + item.explain;
+            group.appendChild(e);
+          }
+        });
+        group.appendChild(b);
+      });
+      host.appendChild(group);
+      if(qi < KC.length - 1){ var hr = document.createElement('div'); hr.style.height = '18px'; host.appendChild(hr); }
+    });
+  }
+
+  // ── Reduced-motion guard ───────────────────────────────────────────────
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    var st = document.createElement('style');
+    st.textContent = '*{transition:none !important; animation:none !important}';
+    document.head.appendChild(st);
+  }
+
+  // init
+  reset(); drawArch(); renderKC();
+})();
+</script>
+</body>
+</html>
