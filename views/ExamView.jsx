@@ -10,6 +10,7 @@
  *   'completed'   — Results: raw/scaled score, pass/fail, per-question review
  */
 
+import { useState } from 'react';
 import { useExam, TIME_PER_QUESTION_SEC, EXAM_QUESTION_COUNT } from '@/controllers/useExam';
 import { useProgress } from '@/controllers/ProgressContext';
 import QuestionCard from '@/views/components/QuestionCard';
@@ -91,7 +92,7 @@ function ExamHistorySummary({ examHistory }) {
 
 // ─── Phase: idle ──────────────────────────────────────────────────────────────
 
-function IdleScreen({ startExam, examHistory }) {
+function IdleScreen({ startExam, examHistory, feedbackMode, onToggleFeedback }) {
   const totalQuestions = EXAM_QUESTION_COUNT;
   const minutesPerQuestion = Math.round(TIME_PER_QUESTION_SEC / 60);
 
@@ -114,13 +115,36 @@ function IdleScreen({ startExam, examHistory }) {
         style={{
           fontFamily: 'var(--font-deck)',
           color: 'var(--color-text-secondary)',
-          margin: '0 0 2.25rem',
+          margin: '0 0 1.5rem',
           fontSize: 'var(--text-subhead)',
           lineHeight: 1.6,
         }}
       >
         {totalQuestions} random questions &middot; {minutesPerQuestion} min per question &middot; passing score 720
       </p>
+
+      {/* ── Feedback mode toggle ── */}
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          marginBottom: '1.75rem',
+          cursor: 'pointer',
+          userSelect: 'none',
+          width: 'fit-content',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={feedbackMode}
+          onChange={(e) => onToggleFeedback(e.target.checked)}
+          style={{ width: 15, height: 15, accentColor: 'var(--carbon)', cursor: 'pointer' }}
+        />
+        <span style={{ fontSize: 14, color: 'var(--color-text-secondary)' }}>
+          Show answer feedback after each question
+        </span>
+      </label>
 
       <ExamHistorySummary examHistory={examHistory} />
 
@@ -153,9 +177,15 @@ function InProgressScreen({
   prev,
   goTo,
   submit,
+  feedbackMode,
 }) {
   const total = examQuestions.length;
   const answered = Object.keys(examAnswers).length;
+
+  // In feedback mode, reveal once the current question has an answer.
+  const currentAnswered =
+    currentQuestion && examAnswers[currentQuestion.id] !== undefined;
+  const revealCurrent = feedbackMode && currentAnswered;
 
   // Confirm-and-submit when not all questions answered
   function handleSubmitClick() {
@@ -223,8 +253,8 @@ function InProgressScreen({
         <QuestionCard
           question={currentQuestion}
           selectedIndex={examAnswers[currentQuestion.id] !== undefined ? examAnswers[currentQuestion.id] : null}
-          reveal={false}
-          onSelect={(idx) => answer(currentQuestion.id, idx)}
+          reveal={revealCurrent}
+          onSelect={revealCurrent ? undefined : (idx) => answer(currentQuestion.id, idx)}
         />
       )}
 
@@ -262,9 +292,16 @@ function InProgressScreen({
           let border = '1px solid var(--color-border-tertiary)';
 
           if (isDone) {
-            bg = 'var(--color-background-success)';
-            color = 'var(--color-text-success)';
-            border = '1px solid var(--monolith)';
+            if (feedbackMode) {
+              const isCorrect = examAnswers[q.id] === q.correct;
+              bg = isCorrect ? 'var(--color-background-success)' : 'var(--color-background-danger)';
+              color = isCorrect ? 'var(--color-text-success)' : 'var(--color-text-danger)';
+              border = `1px solid ${isCorrect ? 'var(--monolith)' : 'var(--color-border-danger)'}`;
+            } else {
+              bg = 'var(--color-background-success)';
+              color = 'var(--color-text-success)';
+              border = '1px solid var(--monolith)';
+            }
           }
           if (isCurrent) {
             border = '1.5px solid var(--carbon)';
@@ -442,6 +479,8 @@ function CompletedScreen({
  *   onNavigate — function(route: string) — called with 'home' to navigate back
  */
 export default function ExamView({ onNavigate }) {
+  const [feedbackMode, setFeedbackMode] = useState(false);
+
   const {
     phase,
     examQuestions,
@@ -468,6 +507,8 @@ export default function ExamView({ onNavigate }) {
       <IdleScreen
         startExam={startExam}
         examHistory={examHistory}
+        feedbackMode={feedbackMode}
+        onToggleFeedback={setFeedbackMode}
       />
     );
   }
@@ -487,6 +528,7 @@ export default function ExamView({ onNavigate }) {
         prev={prev}
         goTo={goTo}
         submit={submit}
+        feedbackMode={feedbackMode}
       />
     );
   }
