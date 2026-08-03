@@ -25,7 +25,7 @@ function shuffleInPlace(array, rng = Math.random) {
 }
 
 /**
- * Build a randomized mock exam from all 101 questions.
+ * Build a randomized mock exam from the full scenario question bank.
  *
  * @param {object} [options]
  * @param {number} [options.count] - Number of questions to include (default: all).

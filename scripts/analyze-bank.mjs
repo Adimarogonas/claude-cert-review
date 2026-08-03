@@ -58,12 +58,48 @@ console.log(`  Correct == sole shortest option: ${correctIsShortest}/${N} (${((c
 console.log(`  Avg correct-option length:    ${(sumCorrect / N).toFixed(1)} chars`);
 console.log(`  Avg distractor-option length: ${(sumDistractor / cntDistractor).toFixed(1)} chars`);
 console.log(`  Ratio (correct/distractor): ${(sumCorrect/N / (sumDistractor/cntDistractor)).toFixed(2)}`);
+// 4. Length RANK of the correct option.
+// NOTE: "correct is never the longest" is just as exploitable as "always the
+// longest" — a bank optimised to 0% here hands test-takers the inverse rule.
+// The target is a uniform rank distribution, not a minimised one.
+const rankNames = ["shortest", "2nd", "3rd", "longest"];
+const rank = [0, 0, 0, 0];
+for (const q of qs) {
+  const lens = q.options.map(o => o.length);
+  const sorted = [...lens].sort((a, b) => a - b);
+  rank[sorted.indexOf(lens[q.correct])]++;
+}
+console.log("");
+console.log("--- Correct-option length rank (target 25% each) ---");
+rankNames.forEach((n, i) => {
+  console.log(`  ${n.padEnd(9)} ${String(rank[i]).padStart(3)}  (${((rank[i]/N)*100).toFixed(1)}%)`);
+});
+const chiRank = rank.reduce((s, o) => s + Math.pow(o - N/4, 2) / (N/4), 0);
+console.log(`  chi-square vs uniform (df=3, crit .05=7.81): ${chiRank.toFixed(2)} -> ${chiRank > 7.81 ? "SKEWED" : "OK"}`);
+
 console.log("");
 console.log("--- Per-scenario letter distribution ---");
+let skewedScenarios = 0;
 for (const sc of SCENARIOS) {
   const d = [0,0,0,0];
   sc.questions.forEach(q => d[q.correct]++);
-  console.log(`  S${sc.id} (${sc.questions.length}q): A=${d[0]} B=${d[1]} C=${d[2]} D=${d[3]}  "${sc.title}"`);
+  const n = sc.questions.length;
+  const chiS = d.reduce((s, o) => s + Math.pow(o - n/4, 2) / (n/4), 0);
+  // Longest run of the same answer letter in a row — a visible pattern to learners.
+  let run = 1, longestRun = 1;
+  for (let i = 1; i < n; i++) {
+    run = sc.questions[i].correct === sc.questions[i-1].correct ? run + 1 : 1;
+    if (run > longestRun) longestRun = run;
+  }
+  const unused = d.filter(x => x === 0).length;
+  if (chiS > 7.81) skewedScenarios++;
+  const flags = [
+    chiS > 7.81 ? "SKEWED" : "",
+    unused ? `${unused} unused letter(s)` : "",
+    longestRun >= 3 ? `run of ${longestRun}` : "",
+  ].filter(Boolean).join(", ");
+  console.log(`  S${sc.id} (${n}q): A=${d[0]} B=${d[1]} C=${d[2]} D=${d[3]}  chi=${chiS.toFixed(1)}${flags ? "  <-- " + flags : ""}  "${sc.title}"`);
 }
+console.log(`  Scenarios significantly skewed: ${skewedScenarios}/${SCENARIOS.length}`);
 console.log("");
 console.log("Questions where correct IS the sole longest:", longestOffenders.join(", "));
