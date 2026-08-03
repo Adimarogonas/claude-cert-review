@@ -24,17 +24,62 @@ function shuffleInPlace(array, rng = Math.random) {
   return array;
 }
 
+const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
+
 /**
- * Shuffle a question's answer options and remap the correct index.
+ * Matches the ways explanations in the question bank cite an option by letter:
+ *   (B)   (B, D)   (B and C)   (B, C, D)   Option B   Options B and C   B is
+ * Deliberately narrow — a bare capital letter in prose must NOT be rewritten.
+ */
+const OPTION_REF_RE =
+  /\((?:[A-D])(?:\s*(?:,|and|or|\/|&)\s*[A-D])*\)|\bOptions?\s+[A-D](?:\s*(?:,|and|or|\/|&)\s*[A-D])*|\b[A-D]\s+(?:is|are)\b/g;
+
+/**
+ * Rewrite option-letter citations in an explanation to follow the shuffle.
+ *
+ * Without this, shuffling options silently invalidates ~29% of explanations:
+ * the prose still says "(D)" while D now labels a different option, so the
+ * review screen contradicts the answer it just marked correct.
+ *
+ * @param {string} explanation
+ * @param {number[]} positionOf - positionOf[originalIndex] = shuffledIndex
+ * @returns {string}
+ */
+function remapExplanationLetters(explanation, positionOf) {
+  if (!explanation) return explanation;
+  return explanation.replace(OPTION_REF_RE, (fragment) =>
+    fragment.replace(/[A-D]/g, (letter) => {
+      const moved = positionOf[OPTION_LETTERS.indexOf(letter)];
+      // Leave the letter alone if it can't be mapped (e.g. a 3-option question).
+      return moved === undefined ? letter : OPTION_LETTERS[moved];
+    })
+  );
+}
+
+/**
+ * Shuffle a question's answer options, remapping the correct index and any
+ * option-letter references inside the explanation.
  * Returns a new question object — does not mutate the original.
  * @param {object} question - { options: string[], correct: number, ...rest }
  * @param {() => number} [rng=Math.random]
  * @returns {object}
  */
 function shuffleOptions(question, rng = Math.random) {
-  const correctText = question.options[question.correct];
-  const options = shuffleInPlace([...question.options], rng);
-  return { ...question, options, correct: options.indexOf(correctText) };
+  // Shuffle indices rather than the options themselves so the permutation is
+  // recoverable — the explanation needs it. Consumes the same number of rng()
+  // calls as shuffling the options array directly.
+  const order = shuffleInPlace(question.options.map((_, i) => i), rng);
+  const positionOf = [];
+  order.forEach((originalIndex, shuffledIndex) => {
+    positionOf[originalIndex] = shuffledIndex;
+  });
+
+  return {
+    ...question,
+    options: order.map((originalIndex) => question.options[originalIndex]),
+    correct: positionOf[question.correct],
+    explanation: remapExplanationLetters(question.explanation, positionOf),
+  };
 }
 
 /**
