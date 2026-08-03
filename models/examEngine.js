@@ -25,20 +25,33 @@ function shuffleInPlace(array, rng = Math.random) {
 }
 
 /**
+ * Shuffle a question's answer options and remap the correct index.
+ * Returns a new question object — does not mutate the original.
+ * @param {object} question - { options: string[], correct: number, ...rest }
+ * @param {() => number} [rng=Math.random]
+ * @returns {object}
+ */
+function shuffleOptions(question, rng = Math.random) {
+  const correctText = question.options[question.correct];
+  const options = shuffleInPlace([...question.options], rng);
+  return { ...question, options, correct: options.indexOf(correctText) };
+}
+
+/**
  * Build a randomized mock exam from the full scenario question bank.
  *
  * @param {object} [options]
  * @param {number} [options.count] - Number of questions to include (default: all).
  * @param {() => number} [options.rng=Math.random] - RNG for reproducible tests.
- * @returns {object[]} Shuffled array of question objects (shallow copies).
+ * @returns {object[]} Shuffled array of question objects with shuffled answer options.
  */
 export function buildExam({ count, rng = Math.random } = {}) {
   const all = getAllQuestions();
   const shuffled = shuffleInPlace([...all], rng); // copy first — keep source intact
-  if (count !== undefined && count < shuffled.length) {
-    return shuffled.slice(0, count);
-  }
-  return shuffled;
+  const questions = count !== undefined && count < shuffled.length
+    ? shuffled.slice(0, count)
+    : shuffled;
+  return questions.map(q => shuffleOptions(q, rng));
 }
 
 /**
